@@ -1,0 +1,13 @@
+# ===== 编辑器主菜单（主菜单按 7 进入） =====
+chartEditor => Chart Editor
+characterEditor => Character Editor
+stageEditor => Stage Editor
+weekEditor => Week Editor
+menuCharEditor => Menu Character Editor
+dialogueEditor => Dialogue Editor
+dialoguePortraitEditor => Dialogue Portrait Editor
+noteSplashDebug => Note Splash Debug
+
+# ===== Mod 目录提示（底部状态条） =====
+noModDirectory => < No Mod Directory Loaded >
+loadedModDirectory => < Loaded Mod Directory:
