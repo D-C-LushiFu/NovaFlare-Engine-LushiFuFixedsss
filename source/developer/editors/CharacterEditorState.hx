@@ -219,6 +219,8 @@ class CharacterEditorState extends MusicBeatState
 		modInfoPopup.cameras = [camHUD];
 		add(modInfoPopup);
 		windowChrome.onTitleClick = () -> modInfoPopup.openUnder(windowChrome);
+		// 顶栏左侧「退出 角色编辑器」按钮
+		windowChrome.setupExitButton('characterEditor', doExitEditor);
 		#end
 
 		if (ClientPrefs.data.cacheOnGPU)
@@ -560,7 +562,24 @@ class CharacterEditorState extends MusicBeatState
 			healthColorStepperR, healthColorStepperG, healthColorStepperB
 		];
 		for (w in all)
-			if (w != null) try { w.visible = false; w.active = false; } catch(e) {}
+			if (w != null) EditorInputStyle.deepHide(w);
+	}
+
+	/**
+	 * 与 ESC / B 键等价的退出动作（顶栏「退出 角色编辑器」按钮共用）：
+	 *   - _goToPlayState=true 时直接进入 PlayState（导出测试用）
+	 *   - 否则回到 MasterEditorMenu 并播放 freakyMenu BGM
+	 */
+	function doExitEditor():Void
+	{
+		FlxG.mouse.visible = false;
+		if (!_goToPlayState)
+		{
+			MusicBeatState.switchState(new developer.editors.MasterEditorMenu());
+			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		}
+		else
+			MusicBeatState.switchState(new PlayState());
 	}
 
 	/** 生成 Ghost 帧（原 Make Ghost 按钮逻辑） */

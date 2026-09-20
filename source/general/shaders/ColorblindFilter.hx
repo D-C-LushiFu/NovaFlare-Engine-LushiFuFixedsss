@@ -54,7 +54,6 @@ class ColorblindFilter
 		switch (ClientPrefs.data.colorblindMode)
 		{
 			case 'Protanopia':
-				trace('Protanopia filter');
 				a1 = 0.567;
 				b1 = 0.433;
 				c1 = 0;
@@ -65,7 +64,6 @@ class ColorblindFilter
 				b3 = 0.242;
 				c3 = 0.758;
 			case 'Protanomaly':
-				trace('Protanomaly filter');
 				a1 = 0.817;
 				b1 = 0.183;
 				c1 = 0;
@@ -76,7 +74,6 @@ class ColorblindFilter
 				b3 = 0.125;
 				c3 = 0.875;
 			case 'Deuteranopia':
-				trace('Deuteranopia filter');
 				a1 = 0.625;
 				b1 = 0.375;
 				c1 = 0;
@@ -87,7 +84,6 @@ class ColorblindFilter
 				b3 = 0;
 				c3 = 1.0;
 			case 'Deuteranomaly':
-				trace('Deuteranomaly filter');
 				a1 = 0.8;
 				b1 = 0.2;
 				c1 = 0;
@@ -98,7 +94,6 @@ class ColorblindFilter
 				b3 = 0.142;
 				c3 = 0.858;
 			case 'Tritanopia':
-				trace('Tritanopia filter');
 				a1 = 0.95;
 				b1 = 0.05;
 				c1 = 0;
@@ -109,7 +104,6 @@ class ColorblindFilter
 				b3 = 0.475;
 				c3 = 0.525;
 			case 'Tritanomaly':
-				trace('Tritanomaly filter');
 				a1 = 0.967;
 				b1 = 0.033;
 				c1 = 0;
@@ -120,7 +114,6 @@ class ColorblindFilter
 				b3 = 0.183;
 				c3 = 0.817;
 			case 'Achromatopsia':
-				trace('Achromatopsia filter');
 				a1 = 0.299;
 				b1 = 0.587;
 				c1 = 0.114;
@@ -131,7 +124,6 @@ class ColorblindFilter
 				b3 = 0.587;
 				c3 = 0.114;
 			case 'Achromatomaly':
-				trace('Achromatomaly filter');
 				a1 = 0.618;
 				b1 = 0.320;
 				c1 = 0.062;

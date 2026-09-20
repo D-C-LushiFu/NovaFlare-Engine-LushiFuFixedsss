@@ -70,13 +70,17 @@ class InitState extends MusicBeatState
 
 		super.create();
 
-		FlxG.save.bind('funkin', CoolUtil.getSavePath());
+		// `FlxSave.bind()` clears the current `data` up-front and only fills it back in
+		// when the shared object loads successfully, so a save file that fails to parse
+		// (or to read) leaves `FlxG.save.data == null`. Reading any field of that null
+		// Dynamic is a hard access violation on hxcpp, which used to kill the engine
+		// before the first frame. Give flixel a recovery parser and then make sure the
+		// container is never left null.
+		FlxG.save.bind('funkin', CoolUtil.getSavePath(), ClientPrefs.recoverUnreadableSave);
+		ClientPrefs.ensureSaveData();
 
 		ClientPrefs.loadPrefs();
 
-		// 调试/自动化验证用：启动参数 -emk / --emk / emk 或环境变量 NOVAF_EMK=1
-		// 等效于在维护设置里打开「调整移动端各Editor键位」（不弹浏览器）。
-		// 探针文件 emk_debug.txt 用于诊断参数是否到达这里（验证后删除）。
 		// 调试/自动化验证用：启动参数 -emk / --emk / emk 或环境变量 NOVAF_EMK=1
 		// 等效于在维护设置里打开「调整移动端各Editor键位」（不弹浏览器）。
 		#if sys
@@ -159,26 +163,50 @@ class InitState extends MusicBeatState
 				try
 				{
 					trace('checking for update');
-					var http = new haxe.Http("https://raw.githubusercontent.com/NovaFlare-Engine-Concentration/FNF-NovaFlare-Engine/refs/heads/main/gitVersion.txt");
-		
+					// 版本检查必须指向本分支(修复版)自己的仓库，而不是已经停止维护的上游仓库
+					var http = new haxe.Http("https://raw.githubusercontent.com/D-C-LushiFu/NovaFlare-Engine-LushiFuFixedsss/refs/heads/main/gitVersion.txt");
+
 					http.onData = function(data:String)
 					{
-						updateVersion = data.split('\n')[0].trim();
-						var curVersion:Float = MainMenuState.novaFlareEngineDataVersion;
-						trace('version online: ' + data.split('\n')[0].trim() + ', your version: ' + MainMenuState.novaFlareEngineVersion);
-						if (Std.parseFloat(updateVersion) > curVersion)
+						try
 						{
-							trace('versions arent matching!');
-							mustUpdate = true;
+							// gitVersion.txt：第 1 行 = 引擎版本号(如 1.2.1)，第 2 行 = 数据版本号(如 2.9)
+							var lines:Array<String> = data.split('\n');
+							var onlineEngineLine:String = (lines.length > 0 ? lines[0] : '').trim();
+							var onlineDataLine:String = (lines.length > 1 ? lines[1] : '').trim();
+							var onlineEngine:Float = toVersionNumber(onlineEngineLine);
+							var onlineData:Float = toVersionNumber(onlineDataLine);
+							var localEngine:Float = toVersionNumber(MainMenuState.novaFlareEngineVersion);
+							var localData:Float = toVersionNumber(Std.string(MainMenuState.novaFlareEngineDataVersion));
+
+							trace('version online: ' + onlineEngineLine + ', your version: ' + MainMenuState.novaFlareEngineVersion);
+
+							if (onlineEngine > localEngine || onlineData > localData)
+							{
+								trace('versions arent matching!');
+								updateVersion = (onlineEngine > localEngine ? onlineEngineLine : onlineDataLine);
+								TitleState.updateVersion = updateVersion;
+								mustUpdate = true;
+							}
+						}
+						catch (e:Dynamic)
+						{
+							// 解析失败不能影响游戏，只记录日志
+							trace('update check parse error: $e');
 						}
 					}
-		
+
 					http.onError = function(error)
 					{
-						trace('error: $error');
+						trace('update check error: $error');
 					}
-		
+
 					http.request();
+				}
+				catch (e:Dynamic)
+				{
+					// 更新检查里的任何异常都绝不能让整个程序崩溃，只记录日志
+					trace('update check exception: $e');
 				}
 			});
 		}
@@ -551,6 +579,37 @@ class InitState extends MusicBeatState
 	#end
 
 	var changingState:Bool = false;
+
+	/**
+	 * 把版本号字符串(如 "1.2.1"、"2.9")转成可比较的数字，最多支持 3 段。
+	 * 解析失败时返回 NaN，任何比较结果都为 false，不会误报更新。
+	 */
+	static function toVersionNumber(value:String):Float
+	{
+		if (value == null)
+			return Math.NaN;
+
+		var parts:Array<String> = value.split('.');
+		var result:Float = 0;
+		var weight:Float = 1000000;
+		var parsed:Bool = false;
+
+		for (i in 0...3)
+		{
+			if (i >= parts.length)
+				break;
+
+			var part:Null<Int> = Std.parseInt(parts[i]);
+			if (part == null || part < 0)
+				break;
+
+			result += part * weight;
+			weight /= 1000;
+			parsed = true;
+		}
+
+		return parsed ? result : Math.NaN;
+	}
 
 	function changeState() {
 		if (changingState)

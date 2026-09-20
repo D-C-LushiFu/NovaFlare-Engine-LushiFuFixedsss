@@ -39,7 +39,7 @@ class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '0.7.3'; // This is also used for Discord RPC
 	public static var novaFlareEngineDataVersion:Float = 2.9;
-	public static var novaFlareEngineVersion:String = '1.2.1';
+	public static var novaFlareEngineVersion:String = '1.2.2';
 	public static var novaFlareEngineCommit:String = 
 	    #if commit_sha
             haxe.macro.Compiler.getDefine("commit_sha");
@@ -641,7 +641,7 @@ class MainMenuState extends MusicBeatState
 		try
 		{
 			trace('checking for Github Action');
-			var http = new haxe.Http("https://api.github.com/repos/beihu235/FNF-NovaFlare-Engine/actions/runs?per_page=1");
+			var http = new haxe.Http("https://api.github.com/repos/D-C-LushiFu/NovaFlare-Engine-LushiFuFixedsss/actions/runs?per_page=1");
 			http.setHeader("User-Agent", "NovaFlareEngine");
 
 			http.onData = function(data:String)

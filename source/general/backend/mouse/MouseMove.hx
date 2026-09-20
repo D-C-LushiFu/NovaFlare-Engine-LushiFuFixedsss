@@ -260,6 +260,35 @@ class MouseMove extends FlxBasic
         if (moveTween != null) moveTween.cancel();
     }
 
+    /**
+     * 强制把滚动量**当场落位**到 v：清掉惯性、拖动残留和补间，不留任何后续写入。
+     *
+     * ★★ 为什么不能只写 `tweenData = 0`（踩过的坑）★★
+     *   `tweenData` 只是"想去的位置 / 补间目标"，真正被反射写回
+     *   `follow.followData` 的是 **`target`**（见 drawUpdate 里那句
+     *   `if (targetChanged) Reflect.setProperty(...)`）。
+     *   只设 tweenData 时 `target` 还停在旧值，而滚轮给的 `velocity` 有几千的量级、
+     *   要衰减好几秒；`applyInertia` 每帧都会改 `target` → `targetChanged` 为真 →
+     *   把旧值原样写回去。结果就是：切分类时 `contentScrollPos` 刚被置 0，
+     *   下一帧又被顶回"上一个分类滚到底"的位置，新分类一进来就是滚到底的状态
+     *   （本轮抓图实测：点开「用户界面」直接看到第 2 行 customFadeSound 顶在最上面）。
+     *   所以复位必须连 `target` / `__target` / `velocity` 一起清，并直接写一次外部值。
+     */
+    public function resetTo(v:Float):Void {
+        if (moveTween != null) { moveTween.cancel(); moveTween = null; }
+        isDragging = false;
+        _dragPending = false;
+        velocity = 0;
+        velocityArray = [];
+        _pendingDragDelta = 0;
+        _inertiaTime = 0;
+        tweenData = 0;        // 可能触发 moveTo(0) 把 allowLerp 打开…
+        allowLerp = false;    // …所以关它要放在后面
+        target = v;
+        __target = v;
+        Reflect.setProperty(follow, followData, v);
+    }
+
     var isPositive:Bool = true; //正数检测
     private function velocUpdate(data:Float) {
         var zero = Math.abs(data) < minVelocity;

@@ -385,6 +385,8 @@ class StageEditorState extends MusicBeatState implements PsychUIEventHandler.Psy
 		modInfoPopup.cameras = [camHUD];
 		add(modInfoPopup);
 		windowChrome.onTitleClick = () -> modInfoPopup.openUnder(windowChrome);
+		// 顶栏左侧「退出 舞台编辑器」按钮
+		windowChrome.setupExitButton('stageEditor', doExitEditor);
 		#end
 
 		super.create();
@@ -1014,6 +1016,26 @@ class StageEditorState extends MusicBeatState implements PsychUIEventHandler.Psy
 			uiLowQualityCheck, uiHighQualityCheck, uiShowBfCheck, uiShowDadCheck, uiShowGfCheck];
 		for (w in all)
 			if (w != null) try { w.visible = false; w.active = false; } catch (e:Dynamic) {}
+	}
+
+	/**
+	 * 与 ESC / B 键等价的退出动作（顶栏「退出 舞台编辑器」按钮共用）：
+	 *   - 无未保存改动 → 直接回 MasterEditorMenu 并播 freakyMenu BGM
+	 *   - 有未保存改动 → 弹未保存确认弹窗（确认由 ConfirmationPopupSubstate
+	 *     内部处理，handleMenuAction 中 switching 主流程与本函数一致）
+	 *
+	 * 注：帮助/教程面板的"先关再退"逻辑只属于 ESC 修饰，本按钮不继承——
+	 *     用户点「退出」是明确意图，无论浮层都应当走退出流程。
+	 */
+	function doExitEditor():Void
+	{
+		if (!unsavedProgress)
+		{
+			MusicBeatState.switchState(new developer.editors.MasterEditorMenu());
+			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		}
+		else
+			openSubState(new ConfirmationPopupSubstate());
 	}
 
 	/** 菜单动作回调：新 UI 只负责传数据，实际功能全部由旧 PsychUI 按钮的回调实现（旧 UI 不可见但保留）。 */

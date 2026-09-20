@@ -839,7 +839,10 @@ class Console extends Sprite {
 	private function onKeyDown(event:KeyboardEvent):Void {
 		if (!ClientPrefs.data.developerMode) return;
 
-		if ((event.ctrlKey && event.keyCode == KEY_GRAVE) || event.keyCode == KEY_F10) {
+		// ★ 单独的 F10 = 开关控制台；但 **Ctrl+F10 要让出去** ——
+		//   设置界面拿它当「唤出隐藏的测试语言」的开关（见 OptionsState.toggleTestLanguage）。
+		//   这里不吞这个组合，事件才能继续派发到 Flixel 的键盘管理器（FlxG.keys）。
+		if ((event.ctrlKey && event.keyCode == KEY_GRAVE) || (!event.ctrlKey && event.keyCode == KEY_F10)) {
 			toggle();
 			event.stopImmediatePropagation();
 			return;

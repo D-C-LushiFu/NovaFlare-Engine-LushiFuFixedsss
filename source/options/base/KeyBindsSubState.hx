@@ -195,7 +195,11 @@ class KeyBindsSubState extends MusicBeatSubstate
 
 	override function create()
 	{
-		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+		// ★ 关键：子状态的 cameras 必须是主相机（FlxG.camera），不能是最后一个相机
+		//   `FlxG.cameras.list[length-1]` 在沉浸界面下 = chromeCam（AUTO_HIDE 自绘窗口条），
+		//   跟 chromeCam 共用相机 → 渲染顺序：父状态 chrome 条先画 → 子状态键盘 UI 后画 → 顶栏自绘按钮
+		//   被键盘设置等子状态 UI 盖住。改成主相机后：主相机先画（背景/UI/键盘），chromeCam 最后画 → 自绘按钮始终在最上层。
+		cameras = [FlxG.camera];
 
 		var bg:FlxSprite = new FlxSprite(0, 0).makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
 		bg.scrollFactor.set();

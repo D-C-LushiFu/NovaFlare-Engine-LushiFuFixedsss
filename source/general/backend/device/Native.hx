@@ -272,6 +272,11 @@ extern bool hasFsWindowedRect;
 void beginWindowDragNative() {
 	if (curHandle == (HWND)0 || windowDraggingNative) return;
 
+	// 物理左键已经松开（快速甩动：按下→移动→松开 全发生在同一帧内）→ 不启动
+	// 拖动。否则拖动状态会被挂起一帧、又在下一帧 updateWindowDragNative 里
+	// 因"左键已松开"立刻结束，表现为"拖不动"。
+	if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) return;
+
 	// 自管全屏/最大化模式下拖动窗口：先还原到进入前尺寸
 	// （类似系统最大化窗口拖动时自动还原的行为）
 	// 自管模式下窗口始终是"普通窗口"状态，拖动不会自动还原尺寸

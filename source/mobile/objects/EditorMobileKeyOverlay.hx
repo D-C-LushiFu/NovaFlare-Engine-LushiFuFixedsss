@@ -106,6 +106,27 @@ class EditorMobileKeyOverlay extends FlxSpriteGroup
 		alpha = ClientPrefs.data.controlsAlpha + 0.000001;
 	}
 
+	/** ★ 挂起：释放所有注入键并隐藏（编辑器打开子状态如 ESC 试玩时调用，
+	 *  避免编辑器按键与试玩界面混合显示、以及按住中的组合键残留影响后续点击） */
+	public function suspend():Void
+	{
+		releaseAllHeldKeys();
+		visible = false;
+		active = false;
+	}
+
+	/** ★ 命中检测：坐标 (x,y)（逻辑屏幕坐标）是否落在某个按键上（供编辑器判断“本次点击被虚拟键吃掉”） */
+	public function hitTest(x:Float, y:Float):Bool
+	{
+		for (view in views)
+		{
+			if (view == null || view.def == null) continue;
+			if (x >= view.def.x && x <= view.def.x + view.def.w && y >= view.def.y && y <= view.def.y + view.def.h)
+				return true;
+		}
+		return false;
+	}
+
 	// ==================== 加载 ====================
 
 	public function reloadFromFile():Void
@@ -660,7 +681,7 @@ class EditorMobileKeyOverlay extends FlxSpriteGroup
 			k.current = -1; // JUST_RELEASED
 	}
 
-	function releaseAllHeldKeys():Void
+	public function releaseAllHeldKeys():Void
 	{
 		for (key in curHeldKeys)
 			releaseKey(key);

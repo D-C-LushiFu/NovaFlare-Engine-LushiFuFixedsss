@@ -18,6 +18,7 @@ import sys.FileSystem;
 
 import general.backend.Paths;
 import general.backend.Mods;
+import general.backend.language.Language;
 import general.backend.device.Native;
 
 /**
@@ -39,6 +40,23 @@ class WindowControlBar extends FlxSpriteGroup
 {
 	public static final BAR_HEIGHT:Int = 36;
 	public static final BTN_W:Int = 46;
+
+	/**
+	 * AUTO_HIDE 条的「唤出触发带」（逻辑像素）：只有光标进入窗口顶部这么窄的
+	 * 一条，才会把条拉出来。
+	 *
+	 * 原实现复用「条高 + 12」（=48px）当触发带：鼠标在窗口上部随便一晃就会
+	 * 弹出条，误触严重。改为贴边 5px —— 只有真正把光标顶到窗口上沿（或全屏
+	 * 时甩到屏幕顶端）才会唤出。
+	 */
+	public static final REVEAL_STRIP:Float = 5;
+
+	/**
+	 * 展开后的「保持带」余量：条已经拉出来后，光标只要停在条体
+	 * （BAR_HEIGHT）加这点余量以内就不会自动回缩 —— 否则 5px 的触发带会让
+	 * 光标一往下移去点按钮，条就立刻收回去，按钮根本点不到。
+	 */
+	static final KEEP_STRIP:Float = 4;
 
 	// 悬停按钮的用途
 	static final BTN_NONE:Int = 0;
@@ -88,6 +106,30 @@ class WindowControlBar extends FlxSpriteGroup
 	var clickPendingTimer:Float = 0;
 	var clickPendingX:Float = 0;
 	var clickPendingY:Float = 0;
+
+	// ===== 退出按钮（CONSTANT 模式：标题「NovaFlare Engine」左侧） =====
+	public var onExitClick:Void->Void = null;
+	var exitText:String = null;
+	var exitBg:FlxSprite;
+	var exitTxt:FlxText;
+	var hoverExit:Bool = false;
+
+	// ---- 退出按钮「二次确认」状态 ----
+	/** 首次点击后的确认窗口（秒）：这之内再点一次才真正退出 */
+	public static final EXIT_CONFIRM_TIME:Float = 1.0;
+	/** 原色：半透明白叠层（0x2EFFFFFF 的 RGB + alpha 拆开存放） */
+	static final EXIT_BG_NORMAL_COLOR:FlxColor = 0xFFFFFFFF;
+	/** 0x2E / 255，写成字面量避免 static final 非恒定初始化 */
+	static final EXIT_BG_NORMAL_ALPHA:Float = 0.180392;
+	/** 警示色：与 × 悬停红一致 */
+	static final EXIT_BG_ARM_COLOR:FlxColor = 0xFFC42B1C;
+	static final EXIT_TXT_NORMAL:FlxColor = 0xFFE8E8E8;
+	static final EXIT_TXT_ARM:FlxColor = 0xFFFFFFFF;
+
+	/** 已进入「点击一次、等待确认」状态 */
+	var exitArmed:Bool = false;
+	/** 确认状态已流逝时间（0 → EXIT_CONFIRM_TIME） */
+	var exitArmTimer:Float = 0;
 
 	/** CONSTANT 模式：单击标题/图标区（未拖动）时触发（如弹出 Mod 信息） */
 	public var onTitleClick:Void->Void = null;
@@ -176,6 +218,8 @@ class WindowControlBar extends FlxSpriteGroup
 				if (bar.minHover != null) bar.minHover.visible = false;
 				if (bar.maxHover != null) bar.maxHover.visible = false;
 				if (bar.closeHover != null) bar.closeHover.visible = false;
+				bar.hoverExit = false;
+				if (bar.exitBg != null) bar.exitBg.visible = false;
 			}
 		}
 	}
@@ -212,6 +256,20 @@ class WindowControlBar extends FlxSpriteGroup
 		sepLine = new FlxSprite().makeGraphic(1, BAR_HEIGHT - 12, 0xFF4A4A4A);
 		sepLine.y = 6;
 		add(sepLine);
+
+		// ★ 退出按钮：CONSTANT 模式显示在「NovaFlare Engine」标题左侧（divider 左边）
+		//   默认不可见；调用 setExitButton() 后才会渲染并响应点击。
+		//   底色用「白色位图 + color/alpha 染色」而不是直接 bake 颜色：
+		//   二次确认的红色渐隐动画每帧只改 colorTransform，不重建位图。
+		exitBg = new FlxSprite().makeGraphic(1, BAR_HEIGHT, FlxColor.WHITE);
+		exitBg.visible = false;
+		applyExitVisual(1);
+		add(exitBg);
+		exitTxt = new FlxText(0, 0, 0, '');
+		exitTxt.setFormat(Paths.font(uiLabelFontFileName()), 12, EXIT_TXT_NORMAL);
+		exitTxt.antialiasing = true;
+		exitTxt.visible = false;
+		add(exitTxt);
 
 		// hover 高亮层
 		restoreHover = new FlxSprite().makeGraphic(BTN_W, BAR_HEIGHT, 0x26FFFFFF);
@@ -358,6 +416,103 @@ class WindowControlBar extends FlxSpriteGroup
 		return null;
 	}
 
+	// ================= 退出按钮 =================
+
+	/**
+	 * 当前语言对应的控件文本字体（与编辑器自绘菜单条 `EditorInputStyle.langFontFileName`
+	 * 同一逻辑）：读 main 语言组 `fontName`；缺键时若当前语言是 Chinese → Lang-ZH，
+	 * 否则 chillax。
+	 */
+	static function uiLabelFontFileName():String
+	{
+		var n:String = 'chillax';
+		try { n = Language.get('fontName', 'main'); } catch (e:Dynamic) {}
+		if (n == null || n == '' || n.indexOf('fontName') != -1 || n.indexOf('404') != -1)
+			n = (general.backend.ClientPrefs.data.language == 'Chinese') ? 'Lang-ZH' : 'chillax';
+		return n + '.ttf';
+	}
+
+	/**
+	 * 设置「NovaFlare Engine」标题左侧的退出按钮：
+	 *   label = 文案（null/空 → 隐藏按钮）
+	 *   cb    = 点击触发
+	 * AUTO_HIDE 模式始终隐藏（仅供编辑器 CONSTANT 模式使用）。
+	 */
+	public function setExitButton(?label:String = null, ?cb:Void->Void = null):Void
+	{
+		exitText = (label != null && label.length > 0) ? label : null;
+		onExitClick = exitText == null ? null : cb;
+		resetExitArm();
+		if (exitTxt == null) return;
+		if (exitText == null)
+		{
+			exitTxt.visible = false;
+			if (exitBg != null) exitBg.visible = false;
+			hoverExit = false;
+			return;
+		}
+		exitTxt.text = exitText;
+		exitTxt.visible = true;
+		hoverExit = false;
+		relayout();
+	}
+
+	// ================= 退出按钮：二次确认 =================
+
+	/**
+	 * 退出按钮底色：t = 0 纯警示红（刚点过第一下、等待确认），t = 1 原始半透明白。
+	 * 只改 `color` / `alpha`（等价于更新 colorTransform），每帧调用无分配开销。
+	 */
+	function applyExitVisual(t:Float):Void
+	{
+		if (exitBg == null) return;
+		if (t < 0) t = 0;
+		if (t > 1) t = 1;
+		exitBg.color = FlxColor.interpolate(EXIT_BG_ARM_COLOR, EXIT_BG_NORMAL_COLOR, t);
+		exitBg.alpha = EXIT_BG_NORMAL_ALPHA + (1 - t) * (1 - EXIT_BG_NORMAL_ALPHA);
+	}
+
+	/** 清掉「等待确认」状态，恢复原色（重设按钮文案 / 布局重建后调用） */
+	function resetExitArm():Void
+	{
+		exitArmed = false;
+		exitArmTimer = 0;
+		if (exitTxt != null) exitTxt.color = EXIT_TXT_NORMAL;
+		applyExitVisual(1);
+	}
+
+	/** 每帧推进确认动画：1 秒内底色由红渐隐回原样，超时自动解除待确认 */
+	function updateExitArm(elapsed:Float):Void
+	{
+		if (!exitArmed) return;
+		exitArmTimer += elapsed;
+		if (exitArmTimer >= EXIT_CONFIRM_TIME)
+			resetExitArm();
+		else
+			applyExitVisual(exitArmTimer / EXIT_CONFIRM_TIME);
+	}
+
+	/**
+	 * 退出按钮点击：
+	 *   - 第 1 次：进入待确认状态（底色变红，并在 1 秒内渐隐回原色），不退出；
+	 *   - 1 秒之内再点第 2 次：执行 `onExitClick` 真正退出。
+	 *   超出 1 秒未再点击 → 自动回到未确认状态，需重新点两下。
+	 */
+	function handleExitPress():Void
+	{
+		if (onExitClick == null) return;
+		if (exitArmed)
+		{
+			resetExitArm();
+			onExitClick();
+			return;
+		}
+		exitArmed = true;
+		exitArmTimer = 0;
+		if (exitTxt != null) exitTxt.color = EXIT_TXT_ARM;
+		applyExitVisual(0);
+	}
+
 	// ================= 布局 =================
 
 	function relayout(?layoutW:Int = 0):Void
@@ -384,12 +539,35 @@ class WindowControlBar extends FlxSpriteGroup
 		}
 		else
 		{
-			// CONSTANT：标题右对齐到“恢复默认”按钮左侧
+			// CONSTANT：标题右对齐到"恢复默认"按钮左侧
 			var titleRight:Float = restoreX - 16;
 			titleTxt.x = titleRight - titleTxt.width;
 			iconSpr.x = titleTxt.x - 22;
 			sepLine.x = iconSpr.x - 12;
 			sepLine.visible = true;
+
+			// 退出按钮：放在分隔线（divider）左侧 12 像素外
+			//   —— 编辑器退出按钮总是紧邻「NovaFlare Engine」左边
+			if (exitTxt != null && exitText != null && exitText.length > 0)
+			{
+				var padL:Int = 14, padR:Int = 16;
+				var bw:Int = Std.int(exitTxt.width) + padL + padR;
+				// 白底位图 + color/alpha 染色（makeGraphic 会把 color/alpha 复位，
+				// 所以重建后要重新套用当前状态色，否则待确认的红会丢）
+				exitBg.makeGraphic(bw, BAR_HEIGHT, FlxColor.WHITE);
+				applyExitVisual(exitArmed ? (exitArmTimer / EXIT_CONFIRM_TIME) : 1);
+				exitBg.x = sepLine.x - 12 - bw;
+				exitBg.y = 0;
+				exitBg.visible = hoverExit || exitArmed;
+				exitTxt.x = exitBg.x + padL;
+				exitTxt.y = (BAR_HEIGHT - exitTxt.height) / 2;
+				exitTxt.visible = true;
+			}
+			else
+			{
+				if (exitBg != null) exitBg.visible = false;
+				if (exitTxt != null) exitTxt.visible = false;
+			}
 		}
 
 		restoreHover.x = restoreX;
@@ -449,8 +627,10 @@ class WindowControlBar extends FlxSpriteGroup
 		if (mode == WindowBarMode.AUTO_HIDE ? isFullscreen : isMaximized)
 		{
 			// 还原：外框 + 内框错位
+			// （oy 用 12 与"最大化单框"同基准：全屏时 □ 变还原图标后整体下移
+			//   半个图标高，与 - / × 及切换前位置对齐，不会显得偏高）
 			var ox:Float = maxX + 13;
-			var oy:Float = 7 + yOff;
+			var oy:Float = 12 + yOff;
 			var t1 = hLine(10, 0xFFD8D8D8, glyphGroup); t1.x = ox; t1.y = oy;
 			var b1 = hLine(10, 0xFFD8D8D8, glyphGroup); b1.x = ox; b1.y = oy + 9;
 			var l1 = vLine(9, 0xFFD8D8D8, glyphGroup); l1.x = ox; l1.y = oy;
@@ -576,6 +756,10 @@ class WindowControlBar extends FlxSpriteGroup
 			return;
 		}
 
+		// 退出按钮「二次确认」计时：首次点击后 1 秒内底色由红渐隐回原色。
+		// 放在 interaction 之前且不受"光标是否在窗口内"影响，保证动画不被中断。
+		updateExitArm(elapsed);
+
 		updateInteraction(elapsed);
 
 		// ★ SpriteGroup 的 visible 切换（AUTO_HIDE 滑入/滑出）会把所有子对象
@@ -588,6 +772,9 @@ class WindowControlBar extends FlxSpriteGroup
 		closeHover.visible = (hoverBtn == BTN_CLOSE);
 		if (sepLine != null)
 			sepLine.visible = (mode == WindowBarMode.CONSTANT);
+		// 退出按钮背景：CONSTANT 模式 +（鼠标悬停 或 待二次确认）+ 已设置文案时可见
+		if (exitBg != null)
+			exitBg.visible = (hoverExit || exitArmed) && exitText != null && mode == WindowBarMode.CONSTANT;
 		#end
 	}
 
@@ -640,6 +827,22 @@ class WindowControlBar extends FlxSpriteGroup
 	/** AUTO_HIDE：靠近顶部唤出 / 离开隐藏 + 滑入滑出动画 */
 	function updateAutoHide(elapsed:Float):Void
 	{
+		// ★ 全屏时默认禁止唤出（AUTO_HIDE 条只在窗口化/最大化下可用）：
+		//   直接强制收起并跳过唤出判定，条永不可见。
+		//   常驻条（编辑器 / Mods 的 CONSTANT 模式）不受影响。
+		if (Native.windowMode() == 2)
+		{
+			revealed = false;
+			showTimer = 0;
+			hideTimer = 0;
+			slideY += (-BAR_HEIGHT - slideY) * Math.min(1, elapsed * 18);
+			if (slideY <= -BAR_HEIGHT + 0.05)
+				visible = false;
+			else
+				visible = true;
+			return;
+		}
+
 		// 原生轮询只用于"光标是否在窗口上 / 是否贴近顶部条带"（物理判定）
 		var pos:FlxPoint = cursorPhys();
 		var over:Bool = pos != null;
@@ -647,8 +850,11 @@ class WindowControlBar extends FlxSpriteGroup
 		if (pos != null)
 			pos.put();
 
-		// 唤出条带 = 条高 + 12 逻辑像素的渲染物理高度
-		var stripPhys:Float = physY(BAR_HEIGHT + 12) - FlxG.game.y;
+		// 唤出触发带 = 窗口顶部 REVEAL_STRIP 逻辑像素的渲染物理高度（贴边 5px）；
+		// 已展开后放宽到条体高度 + 余量，保证光标能顺利移到按钮上点击。
+		var revealPhys:Float = physY(REVEAL_STRIP) - FlxG.game.y;
+		var keepPhys:Float = physY(BAR_HEIGHT + KEEP_STRIP) - FlxG.game.y;
+		var inZone:Bool = over && myPhys < (revealed ? keepPhys : revealPhys);
 
 		// 拖动中保持展开
 		if (Native.windowDragging())
@@ -656,9 +862,9 @@ class WindowControlBar extends FlxSpriteGroup
 			showTimer = 0;
 			hideTimer = 0;
 		}
-		else if (over && myPhys < stripPhys)
+		else if (inZone)
 		{
-			// 光标靠近顶部 → 唤出
+			// 光标贴到窗口顶部 → 唤出
 			showTimer += elapsed;
 			hideTimer = 0;
 			if (showTimer >= 0.12)
@@ -693,6 +899,32 @@ class WindowControlBar extends FlxSpriteGroup
 	 *  （含相机 zoom / scroll / 视口偏移 / scaleMode），与渲染严格同源。 */
 	function updateInteraction(elapsed:Float):Void
 	{
+		// ★ 全屏时 AUTO_HIDE 条完全禁用交互：条不显示、不 hover、不响应点击
+		//   （避免游玩等界面被顶部条干扰；退出全屏用 F11）。
+		//   常驻条（编辑器 / Mods 的 CONSTANT 模式）不受影响。
+		if (mode == WindowBarMode.AUTO_HIDE && Native.windowMode() == 2)
+		{
+			clearHover();
+			return;
+		}
+
+		// ★ 拖动中必须「最优先」处理，且要在一切基于光标位置/条可见性/窗口动画
+		//   的判断之前：
+		//   快速拖拽时光标会先于窗口移出客户区，此时 cursorPhys() 返回 null
+		//   （cursorClientX/Y 用 WindowFromPoint 判定，光标不在本窗口即 -1），
+		//   条本身也可能正处于滑动状态；原来这些分支排在前面并直接 return，
+		//   导致 windowDragUpdate() 不再被调用 → 窗口停止跟随光标，表现为
+		//   "按住拖到一半突然拖不动了/拖拽失效"。
+		//   windowDragUpdate() 内部以物理左键状态（GetAsyncKeyState）为准，
+		//   松开即自动结束拖动，所以这里不再用 FlxG.mouse.pressed 二次判定
+		//   （事件丢失时它会滞后于真实状态，反而会误结束拖动）。
+		if (Native.windowDragging())
+		{
+			Native.windowDragUpdate();
+			clearHover();
+			return;
+		}
+
 		// 窗口缩放动画进行中不响应点击/拖动
 		if (Native.windowAnimRunning())
 			return;
@@ -706,18 +938,15 @@ class WindowControlBar extends FlxSpriteGroup
 		}
 		phys.put();
 
-		// 条是否大部分可见（AUTO_HIDE 滑出中途不响应）
-		if (mode == WindowBarMode.AUTO_HIDE && slideY < -BAR_HEIGHT * 0.5)
+		// ★ 条必须「基本展开」才响应 hover / 点击 / 拖动候选：
+		//   AUTO_HIDE 条平时藏在屏幕上方（slideY≈-BAR_HEIGHT），只有鼠标贴顶
+		//   才会滑入。若只排除"滑出过半"，则滑入动画进行中（条几乎还没露出来）
+		//   时按钮判定已经生效——而下面的 my = 鼠标y - slideY 偏移又会把
+		//   屏幕顶部（条尚未覆盖的区域）算进条内坐标，导致"看不到条也能按到
+		//   右上角 - □ ×"。这里收紧为只有滑入到接近完整（slideY >= -2）才响应，
+		//   与视觉一致（看到条才能点）。
+		if (mode == WindowBarMode.AUTO_HIDE && slideY < -2)
 		{
-			clearHover();
-			return;
-		}
-
-		if (Native.windowDragging())
-		{
-			Native.windowDragUpdate();
-			if (!FlxG.mouse.pressed)
-				Native.windowDragEnd();
 			clearHover();
 			return;
 		}
@@ -749,6 +978,18 @@ class WindowControlBar extends FlxSpriteGroup
 			minHover.visible = (hoverBtn == BTN_MIN);
 			maxHover.visible = (hoverBtn == BTN_MAX);
 			closeHover.visible = (hoverBtn == BTN_CLOSE);
+		}
+
+		// 退出按钮 hover（divider 左侧）
+		var overExit:Bool = false;
+		if (exitBg != null && exitText != null && exitText.length > 0
+			&& my >= 0 && my < BAR_HEIGHT
+			&& mx >= exitBg.x && mx < exitBg.x + exitBg.width)
+			overExit = true;
+		if (overExit != hoverExit)
+		{
+			hoverExit = overExit;
+			if (exitBg != null) exitBg.visible = overExit;
 		}
 
 		// —— 延迟单击触发（等待双击窗口结束）——
@@ -786,6 +1027,15 @@ class WindowControlBar extends FlxSpriteGroup
 
 		// 新按下：取消待触发的单击（可能是双击）
 		clickPending = false;
+
+		// 退出按钮单击 —— 优先级最高，避免被当成窗口按钮或拖窗。
+		// 首次点击只进入「待确认」（底色变红并 1 秒内渐隐回原色），
+		// 1 秒内再点一次才真正执行退出回调（见 handleExitPress）。
+		if (overExit && onExitClick != null)
+		{
+			handleExitPress();
+			return;
+		}
 
 		if (overBtn == BTN_CLOSE)
 		{
@@ -835,6 +1085,9 @@ class WindowControlBar extends FlxSpriteGroup
 
 	function isDragZone(mx:Float):Bool
 	{
+		// 全屏时窗口铺满屏幕，拖动移动没有意义（也容易误触），禁用拖拽
+		if (Native.windowMode() == 2)
+			return false;
 		if (mode == WindowBarMode.AUTO_HIDE)
 			return mx < restoreX; // AUTO_HIDE：除按钮区外整条可拖
 		return mx >= sepLine.x + 1 && mx < restoreX; // CONSTANT：分隔线右侧、按钮左侧
@@ -850,6 +1103,8 @@ class WindowControlBar extends FlxSpriteGroup
 			maxHover.visible = false;
 			closeHover.visible = false;
 		}
+		hoverExit = false;
+		if (exitBg != null) exitBg.visible = false;
 	}
 
 	// ================= 生命周期 =================

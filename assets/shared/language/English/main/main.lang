@@ -1,5 +1,6 @@
 languageName => English
 fontName => chillax
+langPreview => When you change the language in settings and then read this message, you find you've set the language successfully. So you switch the language again — oh no, why can't you understand it anymore?
 justsayLang => Lang-EN
 play => play
 back => back

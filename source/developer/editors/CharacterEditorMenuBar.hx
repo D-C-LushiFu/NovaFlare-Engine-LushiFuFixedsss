@@ -371,6 +371,7 @@ class CharacterEditorMenuBar extends FlxSpriteGroup
 	}
 
 	// ============ 翻译 key 转换 ============
+	// ★ dev 模式下 Language.get 找不到 key 会返回 'key (404)'，必须同时拦截。
 	/** Widget 类型：w_metronome -> item_metronome */
 	function translateItemKey(key:String):String
 	{
@@ -378,7 +379,7 @@ class CharacterEditorMenuBar extends FlxSpriteGroup
 		if (key.indexOf('w_') == 0)
 			itemKey = 'item_' + key.substring(2);
 		var translated = Language.get(itemKey, 'character');
-		if (translated == itemKey) {
+		if (translated == itemKey || translated.indexOf('(404)') != -1) {
 			// 尝试不带 item_ 前缀
 			translated = Language.get(key.substring(2), 'character');
 		}
@@ -389,11 +390,11 @@ class CharacterEditorMenuBar extends FlxSpriteGroup
 	function translateLabelKey(key:String):String
 	{
 		var translated = Language.get(key, 'character');
-		if (translated == key) {
+		if (translated == key || translated.indexOf('(404)') != -1) {
 			// 尝试带 label_ 前缀
 			translated = Language.get('label_' + key, 'character');
 		}
-		if (translated == 'label_' + key) {
+		if (translated == 'label_' + key || translated.indexOf('(404)') != -1) {
 			// 还是找不到，就用原始 key
 			translated = key;
 		}

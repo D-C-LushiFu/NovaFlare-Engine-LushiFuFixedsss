@@ -192,6 +192,7 @@ desc_include_events => 执行复制 / 粘贴 / 镜像 / 交换 等操作时，�
 desc_duet_notes => 把当前小节的音符复制成二重奏：同一时间点玩家和对手都有同样的音符，适合做合唱段落。
 desc_mirror_notes => 把当前小节内的音符左右镜像，左 ↔ 右、下 ↔ 上 互换。镜像的是按键（箭头方向），不是时值。
 desc_song_title => 歌曲标题，也是谱面文件、Inst/Vocals 音频的默认查找名（不含扩展名），所以别瞎写中文，改成英文短名最稳。
+desc_difficulty => 难度后缀（可自由填写，如 Fuck）。留空 = 保存/加载为「歌曲名.json」；填了 Fuck = 保存/重载为「歌曲名-Fuck.json」，用于制作多难度谱面。
 desc_has_voice => 歌曲是否包含独立的人声轨道（Vocals.ogg / Vocals-dad.ogg / Vocals-mom.ogg）。关掉后引擎会尝试只用 Inst.ogg 播放。
 desc_save => 保存当前谱面到 charts/ 目录。文件名默认就是「歌曲名.json」，改完谱先点一次再说别的。快捷键 Ctrl+S。
 desc_reload_audio => 重新从磁盘读取歌曲的音频文件。当你在外部替换了 Inst.ogg / Vocals.ogg 后点这个，不用重启编辑器。
@@ -259,6 +260,7 @@ label_beats => 当前小节节拍:
 label_section_bpm => 小节 BPM:
 label_copy_beat => 复制节拍:
 label_song_title => 歌曲名:
+label_difficulty => 难度:
 label_song_bpm => BPM:
 label_song_speed => 速度:
 label_song_mania => 键数:

@@ -349,6 +349,7 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 			]},
 			{key: 'song', isTest: false, items: [
 				item_label_widget('w_song_title', 'label_song_title', 'desc_song_title'),
+				item_label_widget('w_difficulty', 'label_difficulty', 'desc_difficulty'),
 				item_widget('w_has_voice', 'desc_has_voice'),
 				SEP,
 				item_cmd('save', 'desc_save', () -> callAction('save'), 'Ctrl+S'),
@@ -431,6 +432,7 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 	}
 
 	// ============ 翻译 key 转换 ============
+	// ★ dev 模式下 Language.get 找不到 key 会返回 'key (404)'，必须同时拦截。
 	/** Widget 类型：w_metronome -> item_metronome */
 	function translateItemKey(key:String):String
 	{
@@ -438,7 +440,7 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 		if (key.indexOf('w_') == 0)
 			itemKey = 'item_' + key.substring(2);
 		var translated = Language.get(itemKey, 'charting');
-		if (translated == itemKey) {
+		if (translated == itemKey || translated.indexOf('(404)') != -1) {
 			// 尝试不带 item_ 前缀
 			translated = Language.get(key.substring(2), 'charting');
 		}
@@ -449,11 +451,11 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 	function translateLabelKey(key:String):String
 	{
 		var translated = Language.get(key, 'charting');
-		if (translated == key) {
+		if (translated == key || translated.indexOf('(404)') != -1) {
 			// 尝试带 label_ 前缀
 			translated = Language.get('label_' + key, 'charting');
 		}
-		if (translated == 'label_' + key) {
+		if (translated == 'label_' + key || translated.indexOf('(404)') != -1) {
 			// 还是找不到，就用原始 key
 			translated = key;
 		}
@@ -785,8 +787,10 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 					if (ctrl.ctype != 'dropdown' || ctrl.open != true) continue;
 					if (ctrl.panelBg == null || !pointInSprite(pMx, pMy, ctrl.panelBg)) continue;
 					var total:Int = (ctrl.options != null) ? ctrl.options.length : 0;
-					var maxScroll:Int = Std.int(Math.max(0, total - MAX_DROP_OPT));
-					ctrl.scrollIdx = Std.int(FlxMath.bound(ctrl.scrollIdx - FlxG.mouse.wheel, 0, maxScroll));
+				// ★ 可见行数按实际面板（屏幕空间可能裁剪了 MAX_DROP_OPT）
+				var visibleRows:Int = (ctrl.panelH != null && ctrl.panelH > 0) ? Std.int(Math.max(1, ctrl.panelH / DROP_OPT_H)) : MAX_DROP_OPT;
+				var maxScroll:Int = Std.int(Math.max(0, total - visibleRows));
+				ctrl.scrollIdx = Std.int(FlxMath.bound(ctrl.scrollIdx - FlxG.mouse.wheel, 0, maxScroll));
 					clearDropdownPanel(ctrl);
 					renderDropdownOptions(ctrl);
 					// ★ 滚动会重建选项行，浮动面板被 clearDropdownPanel 隐藏；
@@ -1038,7 +1042,8 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 					// 内容跟随鼠标：向下拖 dy>0 → 往前翻（scrollIdx 减小）
 					var deltaRows:Int = Math.round(dy / DROP_OPT_H);
 					var total:Int = (ctrl.options != null) ? ctrl.options.length : 0;
-					var maxScroll:Int = Std.int(Math.max(0, total - MAX_DROP_OPT));
+					var visibleRows:Int = (ctrl.panelH != null && ctrl.panelH > 0) ? Std.int(Math.max(1, ctrl.panelH / DROP_OPT_H)) : MAX_DROP_OPT;
+					var maxScroll:Int = Std.int(Math.max(0, total - visibleRows));
 					var ns:Int = Std.int(FlxMath.bound(ctrl.dragScroll0 - deltaRows, 0, maxScroll));
 					if (ns != ctrl.scrollIdx)
 					{
@@ -1138,6 +1143,38 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 		var px:Float = ctrl.box.x;
 		var py:Float = ctrl.box.y + ctrl.box.height + 1;
 		var pw:Float = ctrl.box.width;
+
+		// ★ 面板自适应屏幕：向下展开会超出屏幕底部（长菜单里的下拉如角色列表）
+		//   就向上展开；上下都不够时按可用空间削减可见行数，保证最下面的选项可选到
+		var panelH:Int = visCount * DROP_OPT_H;
+		var topLimit:Float = BAR_HEIGHT + STATUS_HEIGHT + 4; // 菜单区顶部
+		if (py + panelH > FlxG.height - 4)
+		{
+			var upY:Float = ctrl.box.y - panelH - 1;
+			if (upY >= topLimit)
+				py = upY; // 向上展开
+			else
+			{
+				// 上方空间不足：先尽量向上，再按上下可用空间裁行数
+				var roomDown:Int = Std.int(FlxG.height - 4 - (ctrl.box.y + ctrl.box.height + 1));
+				var roomUp:Int = Std.int(ctrl.box.y - topLimit);
+				var maxRows:Int = Std.int(Math.max(0, Math.max(roomDown, roomUp)) / DROP_OPT_H);
+				if (maxRows < visCount) visCount = maxRows;
+				if (visCount < 1) visCount = 1;
+				panelH = visCount * DROP_OPT_H;
+				if (ctrl.box.y - panelH - 1 >= topLimit)
+					py = ctrl.box.y - panelH - 1; // 向上
+				else
+					py = ctrl.box.y + ctrl.box.height + 1; // 保持向下（已裁到最小可见）
+			}
+		}
+
+		// ★ 重新打开时旧 scrollIdx 可能超出新的可见范围 → clamp，避免行不足出现空白
+		if (ctrl.scrollIdx != null)
+		{
+			if (ctrl.scrollIdx > opts.length - visCount) ctrl.scrollIdx = opts.length - visCount;
+			if (ctrl.scrollIdx < 0) ctrl.scrollIdx = 0;
+		}
 
 		var pBorder:FlxSprite = new FlxSprite().makeGraphic(Std.int(pw) + 2, visCount * DROP_OPT_H + 2, C_DROP_BORDER);
 		pBorder.x = Std.int(px) - 1;
@@ -1261,8 +1298,10 @@ class ChartEditorMenuBar extends FlxSpriteGroup
 		{
 			var step:Float = 1;
 			try { step = w.stepSize; } catch (e:Dynamic) {}
-			// ★ 按住 Shift 点击 = 大步进（×5）；否则用默认步长
-			if (FlxG.keys.pressed.SHIFT)
+			// ★ 按住 Alt 点击 = ×10 大步进；按住 Shift = ×5；否则用默认步长
+			if (FlxG.keys.pressed.ALT)
+				step *= 10;
+			else if (FlxG.keys.pressed.SHIFT)
 				step *= 5;
 			w.value = w.value + step * dir; // setter 自动 clamp min/max 并更新文本
 			// 原生 set_value 只改文本不广播事件，手动补一发 CHANGE_EVENT 让 ChartingState 更新数据

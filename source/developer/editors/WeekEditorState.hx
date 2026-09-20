@@ -660,11 +660,43 @@ class WeekEditorState extends MusicBeatState
 		refreshCheckRowVisuals();
 	}
 
+	// ============ 移动端软键盘 ============
+
+	/** 启用/禁用系统文本输入（软键盘）。flixel-ui 的 FlxInputText 只在 #if mobile
+	 *  构建里弹键盘；这里按 PsychUIInputText 的做法在聚焦回调里显式启用，
+	 *  触屏模拟（Windows + 移动设置）与真移动端均生效。 */
+	public static function setTextInputEnabled(on:Bool):Void
+	{
+		try
+		{
+			var win:Dynamic = (FlxG.stage != null) ? Reflect.field(FlxG.stage, 'window') : null;
+			if (win != null) win.textInputEnabled = on;
+		}
+		catch (e:Dynamic) {}
+	}
+
+	/** 给输入框挂聚焦回调：点击聚焦 → 弹软键盘；失焦 → 收回。 */
+	static function bindSoftKeyboard(w:FlxUIInputText):Void
+	{
+		if (w == null) return;
+		try
+		{
+			w.focusGained = function()
+			{
+				setTextInputEnabled(true);
+			};
+			w.focusLost = function()
+			{
+				setTextInputEnabled(false);
+			};
+		}
+		catch (e:Dynamic) {}
+	}
+
 	function addWeekUI()
 	{
 		tabWeek = new FlxUI(null, this);
 		tabWeek.name = "Week";
-
 		var x0:Float = 12;
 		var lblX:Float = x0;
 		var inputX:Float = x0 + 144;
@@ -678,6 +710,7 @@ class WeekEditorState extends MusicBeatState
 		{
 			var t:FlxUIInputText = new FlxUIInputText(inputX, y, inputW, '', 12, 0xFFFFFFFF, EditorInputStyle.BG);
 			EditorInputStyle.apply(t); // 修复白色文字早退问题 + 统一边框
+			bindSoftKeyboard(t); // 移动端/触屏：聚焦时启用系统软键盘
 			return t;
 		}
 
@@ -760,10 +793,12 @@ class WeekEditorState extends MusicBeatState
 
 		weekBeforeInputText = new FlxUIInputText(x0 + 144, 66, PANEL_W - 24 - 148, '', 12, 0xFFFFFFFF, EditorInputStyle.BG);
 		EditorInputStyle.apply(weekBeforeInputText);
+		bindSoftKeyboard(weekBeforeInputText);
 		blockPressWhileTypingOn.push(weekBeforeInputText);
 
 		difficultiesInputText = new FlxUIInputText(x0 + 144, 90, PANEL_W - 24 - 148, '', 12, 0xFFFFFFFF, EditorInputStyle.BG);
 		EditorInputStyle.apply(difficultiesInputText);
+		bindSoftKeyboard(difficultiesInputText);
 		blockPressWhileTypingOn.push(difficultiesInputText);
 
 		var lblBefore:FlxText = new FlxText(x0, 66 + 3, 140, Language.get('w_week_before', 'week') + ':', 12);
@@ -1040,7 +1075,10 @@ class WeekEditorState extends MusicBeatState
 				blockInput = true;
 
 				if (FlxG.keys.justPressed.ENTER)
+				{
 					inputText.hasFocus = false;
+					setTextInputEnabled(false); // 程序失焦不走 focusLost，手动收回软键盘
+				}
 				break;
 			}
 		}
@@ -1620,6 +1658,9 @@ class WeekEditorFreeplayState extends MusicBeatState
 		try { st.remove(widget); } catch (e:Dynamic) {}
 		try { st.add(widget); } catch (e:Dynamic) {}
 		try { widget.hasFocus = true; } catch (e:Dynamic) {}
+		// 程序直接聚焦不走 FlxInputText 的 mouse 聚焦路径（focusGained 不触发），
+		// 这里显式启用系统软键盘（移动端/触屏）
+		WeekEditorState.setTextInputEnabled(true);
 		try
 		{
 			var caret:Dynamic = Reflect.field(widget, 'caret');
@@ -1644,6 +1685,7 @@ class WeekEditorFreeplayState extends MusicBeatState
 			}
 			catch (e:Dynamic) {}
 			colorInputActive = null;
+			WeekEditorState.setTextInputEnabled(false); // 收回软键盘
 		}
 	}
 

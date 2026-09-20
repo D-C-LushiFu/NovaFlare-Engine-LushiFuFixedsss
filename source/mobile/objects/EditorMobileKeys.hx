@@ -280,6 +280,17 @@ class EditorMobileKeys
 			activeEditorState = state;
 			activeEditorId = id;
 		}
+
+		// ★ 编辑器打开子状态（ESC 试玩 / 确认弹窗等）时挂起自定义按键：
+		//   隐藏 overlay + 释放注入键，避免编辑器按键混进试玩界面、
+		//   或按住中的 Ctrl/Shift 组合键残留导致后续网格点击被“消除”
+		if (state.subState != null)
+		{
+			var overlay:EditorMobileKeyOverlay = state.editorMobileOverlay;
+			if (overlay != null)
+				overlay.suspend();
+			return;
+		}
 		customizeState(state, id);
 	}
 

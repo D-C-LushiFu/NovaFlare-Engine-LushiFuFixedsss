@@ -238,6 +238,9 @@ class MusicBeatState extends FlxUIState
 
 	override function update(elapsed:Float)
 	{
+		// 注意：此处曾有每 60 帧一次 `sys.io.File.append('ui_mark.log', ...)` 的诊断写盘，
+		// 在所有状态（含 PlayState）的 update 热路径上做同步 open/write/close，
+		// 240TPS 下每秒 4 次 IO 往返，是周期性长帧的来源，已移除。
 		// everyStep();
 		EditorMobileKeys.frameUpdate(this);
 		var oldStep:Int = curStep;

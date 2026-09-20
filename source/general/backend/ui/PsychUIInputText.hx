@@ -1081,7 +1081,10 @@ class PsychUIInputText extends FlxSpriteGroup
 				default:
 					throw new flash.errors.Error("FlxInputText: Unknown filterMode (" + filterMode + ")");
 			}
-			text = pattern.replace(text, "");
+			// ★ 防御：与 flixel-ui 的 FlxInputText.filter 同款隐患，
+			//   CUSTOM_FILTER 下 customFilterPattern 可能尚未赋值（null）。
+			if (pattern != null)
+				text = pattern.replace(text, "");
 		}
 		return text;
 	}

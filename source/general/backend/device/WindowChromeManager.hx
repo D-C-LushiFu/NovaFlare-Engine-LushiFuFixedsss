@@ -9,7 +9,11 @@ import general.objects.WindowControlBar;
 
 import developer.editors.CharacterEditorState;
 import developer.editors.ChartingState;
+import developer.editors.DialogueCharacterEditorState;
+import developer.editors.DialogueEditorState;
+import developer.editors.NoteSplashEditorState;
 import developer.editors.StageEditorState;
+import states.modsMenuState.ModsMenuState;
 
 /**
  * 沉浸式窗口 chrome 管理（全自绘、全界面统一方案）：
@@ -33,8 +37,22 @@ class WindowChromeManager
 
 	/** 不自动挂载 AUTO_HIDE 条的界面（它们自带 CONSTANT 窗口条） */
 	public static var editorScreens:Array<Class<Dynamic>> = [
-		ChartingState, CharacterEditorState, StageEditorState
+		ChartingState, CharacterEditorState, StageEditorState,
+		DialogueEditorState, DialogueCharacterEditorState, NoteSplashEditorState,
+		// ★ Mods 菜单（新界面）也自建 CONSTANT 条：它要在条上挂 9 个工具按钮 +
+		//   搜索框 + 打开文件夹/退出，需要拿到 bar 的引用（titleAnchorX()），
+		//   所以从 constantBarScreens 移到这里，由 ModsMenuState 自己 new。
+		ModsMenuState
 	];
+
+	/**
+	 * ★ 使用**常驻**（CONSTANT）窗口条的界面：窗口条始终显示、可交互，
+	 * 全屏下也不受"仅开发工具/Mods 可用"的限制。
+	 *
+	 * 默认（不在列表里的界面）挂 AUTO_HIDE 条：平时隐藏、鼠标贴顶唤出；
+	 * **全屏时完全禁用**（唤不出、点不到），退出全屏用 F11。
+	 */
+	public static var constantBarScreens:Array<Class<Dynamic>> = [];
 
 	/** 当前状态是否属于沉浸界面 */
 	public static var immersive:Bool = false;
@@ -154,8 +172,11 @@ class WindowChromeManager
 		if (isStateIn(state, editorScreens))
 			return; // 编辑器自带 CONSTANT 窗口条
 
-		// 上一个状态的条已随旧状态销毁，这里总是挂新的
-		var bar:WindowControlBar = new WindowControlBar(WindowBarMode.AUTO_HIDE);
+		// 上一个状态的条已随旧状态销毁，这里总是挂新的。
+		// Mods 等 constantBarScreens 界面用常驻条（全屏下也可用）；
+		// 其余界面 AUTO_HIDE（平时隐藏，全屏时完全禁用）。
+		var barMode:WindowBarMode = isStateIn(state, constantBarScreens) ? WindowBarMode.CONSTANT : WindowBarMode.AUTO_HIDE;
+		var bar:WindowControlBar = new WindowControlBar(barMode);
 		bar.scrollFactor.set();
 
 		// 统一挂到顶层 chrome 相机（FlxG.cameras 列表末尾，最后绘制）。

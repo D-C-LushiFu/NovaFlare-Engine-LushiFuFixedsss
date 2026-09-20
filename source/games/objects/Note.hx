@@ -59,6 +59,16 @@ class Note extends FlxSprite
 	public var strumTime:Float = 0;
 	public var noteData:Int = 0;
 
+	/**
+	 * 生成期该音符所属「段」的 mania（每侧键数 - 1）。
+	 * 由 PlayState.generateSong 按 KeyChange(MoreKey) 事件时间线传入；
+	 * -1 = 未指定（整谱单键数/编辑器等），此时一切逻辑回退到 PlayState.SONG.mania。
+	 * 用于保证 mid-song 换键时：颜色/方向/缩放按音符自己那段正确渲染，
+	 * 共享 RGB shader 槽不会被不同键数段的音符互相污染（RGBShaderReference
+	 * 会在颜色不一致时自动克隆私有 palette）。
+	 */
+	public var generatedMania:Int = -1;
+
 	public var mustPress:Bool = false;
 	public var canBeHit:Bool = false;
 	public var tooLate:Bool = false;
@@ -183,13 +193,9 @@ class Note extends FlxSprite
 
 	public function defaultRGB()
 	{
-		var mania = 3;
-		if (PlayState.SONG != null)
-			mania = PlayState.SONG.mania;
-
-		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[getIndex(mania, noteData)];
+		var arr:Array<FlxColor> = ClientPrefs.data.arrowRGB[getIndex(curMania(), noteData)];
 		if (PlayState.isPixelStage)
-			arr = ClientPrefs.data.arrowRGBPixel[getIndex(mania, noteData)];
+			arr = ClientPrefs.data.arrowRGBPixel[getIndex(curMania(), noteData)];
 
 		if (noteData > -1 /*&& noteData <= arr.length*/)
 		{
@@ -264,18 +270,54 @@ class Note extends FlxSprite
 	{
 		return ExtraKeysHandler.instance.data.animations[index];
 	}
+
+	/**
+	 * 越界安全的 EKAnimation 读取（mania/note/animations 越界返回 null，绝不抛异常）：
+	 * 用于自绘预览/KeyChange 中段加载等高风险路径，避免 getAnimSet(...).note NPE。
+	 */
+	public function tryGetAnimSet(mania:Int, note:Int):EKAnimation
+	{
+		if (ExtraKeysHandler.instance == null || ExtraKeysHandler.instance.data == null) return null;
+		var data = ExtraKeysHandler.instance.data;
+		if (data.keys == null || data.animations == null) return null;
+		if (mania < 0 || mania >= data.keys.length) return null;
+		var notesArr:Array<Int> = data.keys[mania].notes;
+		if (notesArr == null || note < 0 || note >= notesArr.length) return null;
+		var visIdx:Int = notesArr[note];
+		if (visIdx < 0 || visIdx >= data.animations.length) return null;
+		return data.animations[visIdx];
+	}
+
+	/** 该音符生效的 mania：优先生成期所属段（generatedMania），否则当前谱面 mania */
+	inline function curMania():Int
+	{
+		if (generatedMania >= 0)
+			return generatedMania;
+		return (PlayState.SONG != null) ? PlayState.SONG.mania : 3;
+	}
 	
 
-	public function new(strumTime:Float, noteData:Int, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?createdFrom:Dynamic = null)
+	public function new(strumTime:Float, noteData:Int, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?createdFrom:Dynamic = null, ?generatedMania:Int = -1)
 	{
 		super();
 
+		this.generatedMania = generatedMania;
+
 		if (PlayState.SONG != null)
 		{
-			trackedScale = ExtraKeysHandler.instance.data.scales[PlayState.SONG.mania];
-			if (PlayState.isPixelStage)
+			// ★ 防御：ExtraKeysHandler/scales 可能与 PlayState.SONG.mania 不一致（KeyChange 中段加载、
+			//   编辑器预览、老存档残值等），mania 越界会读 scales/pixelScales 之外的内存 → NPE/AV。
+			//   越界时 clamp 到 [0, length-1]，且数组为 null/空时整体跳过。
+			if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null)
 			{
-				trackedScale = ExtraKeysHandler.instance.data.pixelScales[PlayState.SONG.mania];
+				var safeMania:Int = curMania();
+				var ek = ExtraKeysHandler.instance.data;
+				if (ek.scales != null && safeMania >= 0 && safeMania < ek.scales.length)
+				{
+					trackedScale = ek.scales[safeMania];
+					if (PlayState.isPixelStage && ek.pixelScales != null && safeMania < ek.pixelScales.length)
+						trackedScale = ek.pixelScales[safeMania];
+				}
 			}
 		}
 
@@ -325,12 +367,10 @@ class Note extends FlxSprite
 			x += swagWidth * (noteData);
 			if (!isSustainNote /* && noteData < colArray.length*/)
 			{ // Doing this 'if' check to fix the warnings on Senpai songs
-				var animToPlay:String = '';
-				var mania = 3;
-				if (PlayState.SONG != null)
-					mania = PlayState.SONG.mania;
-				animToPlay = getAnimSet(getIndex(mania, noteData)).note;
-				animation.play(animToPlay + 'Scroll');
+				// ★ 防御：getIndex/getAnimSet 越界时 EKAnimation 引用 null → .note 字段访问 NPE
+				var animSet = tryGetAnimSet(curMania(), noteData);
+				var animToPlay:String = (animSet != null && animSet.note != null) ? animSet.note : '';
+				if (animToPlay != '') animation.play(animToPlay + 'Scroll');
 			}
 		}
 
@@ -348,10 +388,7 @@ class Note extends FlxSprite
 			offsetX += width / 2;
 			//copyAngle = false;
 
-			var mania = 3;
-			if (PlayState.SONG != null)
-				mania = PlayState.SONG.mania;
-			var animToPlay = getAnimSet(getIndex(mania, noteData)).note;
+			var animToPlay = getAnimSet(getIndex(curMania(), noteData)).note;
 			animation.play(animToPlay + 'holdend');
 
 			updateHitbox();
@@ -394,32 +431,66 @@ class Note extends FlxSprite
 
 	public static function initializeGlobalRGBShader(noteData:Int)
 	{
-		// ★ 事件音符（noteData=-1）等非法索引：返回共享默认 shader，绝不读写数组（负索引越界写会破坏内存，
-		//   导致事件音符渲染被颜色干涉）；事件音符创建后 rgbShader.enabled=false，默认 shader 不生效。
+		// ★ 保持原始语义：越界（事件音符 noteData=-1 / lane 超出已分配槽位）一律返回共享的
+		//   globalRgbShaders[0]，**不 grow 数组** —— 游戏内所有 Note/StrumNote 依赖这个行为
+		//   （拿到共享槽后各自赋值 r/g/b，由 RGBShaderReference 自动克隆私有 palette）。
+		//   擅自改成 grow 会改变所有音符的 shader 归属 → 配色/克隆逻辑全变，风险极高。
 		if (noteData < 0 || noteData >= globalRgbShaders.length)
 		{
 			if (globalRgbShaders.length < 1)
-				globalRgbShaders.push(new RGBPalette());
+				globalRgbShaders.push(buildGlobalPalette(0));
 			return globalRgbShaders[0];
 		}
+
+		// 槽位已分配但内容为空（外部手动 push(null) 预留时）→ 补一个已取色的 palette
 		if (globalRgbShaders[noteData] == null)
-		{
-			var newRGB:RGBPalette = new RGBPalette();
-			globalRgbShaders[noteData] = newRGB;
+			globalRgbShaders[noteData] = buildGlobalPalette(noteData);
 
-			var mania = 3;
-			if (PlayState.SONG != null)
-				mania = PlayState.SONG.mania;
-
-			var arr:Array<FlxColor> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[ExtraKeysHandler.instance.data.keys[mania].notes[noteData]] : ClientPrefs.data.arrowRGBPixel[ExtraKeysHandler.instance.data.keys[mania].notes[noteData]];
-			if (noteData > -1 /*&& noteData <= arr.length*/)
-			{
-				newRGB.r = arr[0];
-				newRGB.g = arr[1];
-				newRGB.b = arr[2];
-			}
-		}
 		return globalRgbShaders[noteData];
+	}
+
+	/**
+	 * 构造一个「已按当前 mania / 当前像素模式取好色」的全局 RGB palette。
+	 * 所有可能越界/为 null 的环节都兜底：ExtraKeysHandler 未初始化、keys/notes 越界、
+	 * arrowRGB/arrowRGBPixel 为 null 或长度不足 —— 一律退到 lane 0 / 构造器默认色，
+	 * 绝不返回 null，也绝不越界读。
+	 */
+	static function buildGlobalPalette(noteData:Int):RGBPalette
+	{
+		var newRGB:RGBPalette = new RGBPalette();
+
+		var mania:Int = 3;
+		if (PlayState.SONG != null)
+			mania = PlayState.SONG.mania;
+
+		// ★ KeyChange(MoreKey) 防御：生成期 SONG.mania 仍是初始键数，而音符轨号可能属于
+		//   后面的段（如 4K 谱首建 6K 段的轨 4/5）——映射表越界时兜底到轨 0，绝不越界读
+		var visualIndex:Int = 0;
+		if (ExtraKeysHandler.instance != null && ExtraKeysHandler.instance.data != null
+			&& mania >= 0 && mania < ExtraKeysHandler.instance.data.keys.length)
+		{
+			var notesArr:Array<Int> = ExtraKeysHandler.instance.data.keys[mania].notes;
+			if (notesArr != null && noteData >= 0 && noteData < notesArr.length)
+				visualIndex = notesArr[noteData];
+		}
+
+		// ★ 越界保护：arrowRGB 默认只有 4 项，但 10K 的 notes 映射会翻出 4..9 的视觉 lane
+		var src:Array<Array<FlxColor>> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB : ClientPrefs.data.arrowRGBPixel;
+		var arr:Array<FlxColor> = null;
+		if (src != null)
+		{
+			if (visualIndex < 0) visualIndex = 0;
+			if (visualIndex >= src.length) visualIndex = src.length - 1;
+			if (visualIndex >= 0) arr = src[visualIndex];
+		}
+
+		if (arr != null && arr.length > 2)
+		{
+			newRGB.r = arr[0];
+			newRGB.g = arr[1];
+			newRGB.b = arr[2];
+		}
+		return newRGB;
 	}
 
 	var _lastNoteOffX:Float = 0;
@@ -443,22 +514,32 @@ class Note extends FlxSprite
 		{
 			skinPixel = skin;
 
+			// ★ 防御：当前皮肤可能没有像素版贴图（Paths.image 返回 null），
+			//   直接读 graphic.width/height 会空指针崩溃，逐级回退到默认像素贴图。
 			if (isSustainNote)
 			{
 				var graphic = Paths.image('pixelUI/' + skinPixel + 'ENDS' + skinPostfix, null, false);
-				loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 2));
-				originalHeight = graphic.height / 2;
+				if (graphic == null) graphic = Paths.image('pixelUI/noteSkins/NOTE_assetsENDS' + skinPostfix, null, false);
+				if (graphic == null) graphic = Paths.image('pixelUI/noteSkins/NOTE_assetsENDS', null, false);
+				if (graphic != null)
+				{
+					loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 2));
+					originalHeight = graphic.height / 2;
+				}
 			}
 			else
 			{
 				var graphic = Paths.image('pixelUI/' + skinPixel + skinPostfix, null, false);
-				loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
+				if (graphic == null) graphic = Paths.image('pixelUI/noteSkins/NOTE_assets' + skinPostfix, null, false);
+				if (graphic == null) graphic = Paths.image('pixelUI/noteSkins/NOTE_assets', null, false);
+				if (graphic != null)
+					loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
 			}
 
-			var mania = 3;
-			if (PlayState.SONG != null)
-				mania = PlayState.SONG.mania;
-			setGraphicSize((width * (ExtraKeysHandler.instance.data.pixelScales[mania] + 0.3)) * PlayState.daPixelZoom);
+			var cm:Int = curMania();
+			if (cm >= ExtraKeysHandler.instance.data.pixelScales.length)
+				cm = ExtraKeysHandler.instance.data.pixelScales.length - 1;
+			setGraphicSize((width * (ExtraKeysHandler.instance.data.pixelScales[cm] + 0.3)) * PlayState.daPixelZoom);
 
 			loadPixelNoteAnims();
 			antialiasing = false;
@@ -557,15 +638,16 @@ class Note extends FlxSprite
 
 	public static function getLoadDataKey(texture:String, postfix:String):String
 	{
-		return '${texture}::${postfix}';
+		// ★ key 必须包含 像素/普通 状态：否则在常规模式缓存了 skinPostfix 后切到像素模式，
+		//   缓存直接命中并跳过“像素贴图不存在则清空 postfix”的回退检查，
+		//   导致 Paths.image('pixelUI/...' + postfix) 返回 null → reloadNote 读 graphic.width 崩溃
+		//   （EXCEPTION_ACCESS_VIOLATION，如 -Classic/-Stepmania 皮肤没有像素版）。
+		return '${texture}::${postfix}::' + (PlayState.isPixelStage ? 'P' : 'N');
 	}
 
 	function loadNoteAnims()
 	{
-		var mania = 3;
-		if (PlayState.SONG != null)
-			mania = PlayState.SONG.mania;
-		var noteAnim = getAnimSet(getIndex(mania, noteData)).note;
+		var noteAnim = getAnimSet(getIndex(curMania(), noteData)).note;
 
 		if (isSustainNote)
 		{
@@ -587,11 +669,8 @@ class Note extends FlxSprite
 
 	function loadPixelNoteAnims()
 	{
-		var mania = 3;
-		if (PlayState.SONG != null)
-			mania = PlayState.SONG.mania;
-		var noteAnimStr = getAnimSet(getIndex(mania, noteData)).note;
-		var noteAnimInt = getAnimSet(getIndex(mania, noteData)).pixel;
+		var noteAnimStr = getAnimSet(getIndex(curMania(), noteData)).note;
+		var noteAnimInt = getAnimSet(getIndex(curMania(), noteData)).pixel;
 
 		if (isSustainNote)
 		{
@@ -670,10 +749,11 @@ class Note extends FlxSprite
 	{
 		if (!FlxG.isFullFrame) return;
 
-		var mania = 3;
-		if (PlayState.SONG != null)	mania = PlayState.SONG.mania;
-		var Mscale = ExtraKeysHandler.instance.data.scales[mania];
-		if (PlayState.isPixelStage) Mscale = ExtraKeysHandler.instance.data.pixelScales[mania];
+		var cm:Int = curMania();
+		if (cm >= ExtraKeysHandler.instance.data.scales.length)
+			cm = ExtraKeysHandler.instance.data.scales.length - 1;
+		var Mscale = ExtraKeysHandler.instance.data.scales[cm];
+		if (PlayState.isPixelStage) Mscale = ExtraKeysHandler.instance.data.pixelScales[cm];
 		var sWidth = Note.swagWidthUnscaled * Mscale;
 
 		var strumX:Float = myStrum.x;
@@ -718,12 +798,12 @@ class Note extends FlxSprite
 	{
 		if (!FlxG.isFullFrame) return;
 
-		var mania = 3;
-		if (PlayState.SONG != null)
-			mania = PlayState.SONG.mania;
-		var Mscale = ExtraKeysHandler.instance.data.scales[mania];
+		var cm:Int = curMania();
+		if (cm >= ExtraKeysHandler.instance.data.scales.length)
+			cm = ExtraKeysHandler.instance.data.scales.length - 1;
+		var Mscale = ExtraKeysHandler.instance.data.scales[cm];
 		if (PlayState.isPixelStage)
-			Mscale = ExtraKeysHandler.instance.data.pixelScales[mania];
+			Mscale = ExtraKeysHandler.instance.data.pixelScales[cm];
 
 		var sWidth = Note.swagWidthUnscaled * Mscale;
 

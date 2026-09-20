@@ -42,10 +42,13 @@ class Paths
 		graphic.destroyOnNoUse = true;
 	}
 
+	/** ★ 置 true 后下一次 returnSound（inst/voices 等）会跳过声音缓存、强制从磁盘重新加载
+	 *  （用于编谱器"重载音频"：用户改了 Inst/Voices 文件后点重载要听到新文件） */
+	public static var forceReloadSounds:Bool = false;
+
 	public static function clearStoredMemory()
 	{
 		var clearStarted:Float = haxe.Timer.stamp();
-		// clear anything not in the tracked assets list
 		@:privateAccess
 		for (key in FlxG.bitmap._cache.keys())
 		{
@@ -470,7 +473,6 @@ class Paths
 		if (bitmap != null)
 			return cacheBitmap(file, bitmap, allowGPU);
 
-		trace('oh no its returning null NOOOO ($file)');
 		return null;
 	}
 
@@ -517,7 +519,6 @@ class Paths
 		if (bitmap != null)
 			return cacheBitmap(file, bitmap, allowGPU);
 
-		trace('oh no its returning null NOOOO ($file)');
 		return null;
 	}
 
@@ -807,6 +808,9 @@ class Paths
 
 		if (FileSystem.exists(file))
 		{
+			// ★ 强制重载：清除该文件的缓存条目，下次直接重新解码磁盘文件
+			if (forceReloadSounds && Cache.currentTrackedSounds.exists(file))
+				Cache.currentTrackedSounds.remove(file);
 			if (!Cache.currentTrackedSounds.exists(file))
 			{
 				var sound = Sound.fromFile(file);
@@ -830,6 +834,9 @@ class Paths
 		gottenPath = gottenPath.substring(gottenPath.indexOf(':') + 1, gottenPath.length);
 		// trace(gottenPath);
 
+		// ★ 强制重载：清除缓存条目后重新解码磁盘文件
+		if (forceReloadSounds && Cache.currentTrackedSounds.exists(gottenPath))
+			Cache.currentTrackedSounds.remove(gottenPath);
 		if (!Cache.currentTrackedSounds.exists(gottenPath))
 		{
 			var retKey:String = (path != null) ? '$path/$key' : key;

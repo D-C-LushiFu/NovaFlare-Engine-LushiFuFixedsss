@@ -78,14 +78,14 @@ class MobileControls extends FlxTypedSpriteGroup<FlxMobileInputManager>
 		{
 			FlxG.save.data.buttons = new Array();
 			for (buttons in virtualPad)
-				FlxG.save.data.buttons.push(FlxPoint.get(buttons.x, buttons.y));
+				FlxG.save.data.buttons.push({x: buttons.x, y: buttons.y});
 		}
 		else
 		{
 			var tempCount:Int = 0;
 			for (buttons in virtualPad)
 			{
-				FlxG.save.data.buttons[tempCount] = FlxPoint.get(buttons.x, buttons.y);
+				FlxG.save.data.buttons[tempCount] = {x: buttons.x, y: buttons.y};
 				tempCount++;
 			}
 		}
@@ -113,20 +113,30 @@ class MobileControls extends FlxTypedSpriteGroup<FlxMobileInputManager>
 		return virtualPad;
 	}
 
+	// NOTE: store plain `{x, y}` objects here, never `FlxPoint` instances.
+	// `FlxPoint` is an abstract over the runtime `flixel.math.FlxBasePoint` class, so a
+	// FlxPoint pushed into save data is serialized as a `FlxBasePoint` class instance
+	// (with its pool internals `_weak` / `_inPool` and its computed properties). Loading
+	// it back requires haxe.Unserializer to rebuild that class instance, which does not
+	// succeed, and the failure is not limited to this one field: the whole save file
+	// becomes unreadable. `FlxSave.bind()` then returns false and leaves
+	// `FlxG.save.data` null, so the next `FlxG.save.data.<field>` read crashes the engine
+	// with EXCEPTION_ACCESS_VIOLATION during boot. Anonymous `{x, y}` objects are plain
+	// data and always serialize/unserialize cleanly.
 	public static function setExtraCustomMode(virtualPad:FlxVirtualPad):Void
 	{
 		if (FlxG.save.data.extraButtons == null)
 		{
 			FlxG.save.data.extraButtons = new Array();
 			for (btn in virtualPad.extraKeys)
-				FlxG.save.data.extraButtons.push(FlxPoint.get(btn.x, btn.y));
+				FlxG.save.data.extraButtons.push({x: btn.x, y: btn.y});
 		}
 		else
 		{
 			var tempCount:Int = 0;
 			for (btn in virtualPad.extraKeys)
 			{
-				FlxG.save.data.extraButtons[tempCount] = FlxPoint.get(btn.x, btn.y);
+				FlxG.save.data.extraButtons[tempCount] = {x: btn.x, y: btn.y};
 				tempCount++;
 			}
 		}

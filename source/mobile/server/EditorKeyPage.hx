@@ -1,10 +1,16 @@
 package mobile.server;
 
 /**
- * 澶栭儴鎸夐敭缂栬緫鍣ㄩ〉闈紙HTML/JS/CSS 鍐呭祵甯搁噺锛夈€? * 婧愭枃浠讹細mobile-key-editor.html 鈥斺€?淇敼鍚庣敤 tools/gen-editor-key-page.ps1 閲嶆柊鐢熸垚鏈枃浠躲€? */
+ * 外部按键编辑器页面（HTML/JS/CSS 内嵌常量）。
+ * 源文件：mobile-key-editor.html —— 修改后用 tools/gen-editor-key-page.ps1 重新生成本文件。
+ *
+ * 说明：整页 HTML 体积超过 MSVC 单字符串字面量上限，故拆成多段常量后在
+ * 运行时拼接（CHUNKS.join("")），不要改回单个字面量。
+ */
 class EditorKeyPage
 {
-	public static var HTML:String = '<!DOCTYPE html>
+	static var CHUNKS:Array<String> = [
+'<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -82,7 +88,8 @@ class EditorKeyPage
   .row{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
   .row.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
   .rowMain{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer}
-  .rowMain .swatch{width:38px;height:38px;border-radius:8px;border:1px solid rgba(255,255,255,.45);flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fff;text-shadow:0 1px 2px #000}
+',
+'  .rowMain .swatch{width:38px;height:38px;border-radius:8px;border:1px solid rgba(255,255,255,.45);flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fff;text-shadow:0 1px 2px #000}
   .rowMain .meta{flex:1;min-width:0}
   .rowMain .meta .t1{display:flex;gap:8px;align-items:center}
   .rowMain .meta .t1 .name{font-weight:700;font-size:16px}
@@ -145,7 +152,8 @@ class EditorKeyPage
   #modal .box{background:var(--card);border:1px solid var(--border);border-radius:12px;width:min(780px,94vw);max-height:88vh;display:flex;flex-direction:column}
   #modal .mhead{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
   #modal .mhead b{font-size:15px}
-  #modal .mhead .spacer{flex:1}
+',
+'  #modal .mhead .spacer{flex:1}
   #modal pre{flex:1;overflow:auto;margin:0;padding:14px 16px;background:#0b0d12;font-family:Consolas,monospace;font-size:13px;color:#d6e2ff;line-height:1.55;white-space:pre}
   #modal .mfoot{display:flex;gap:8px;justify-content:flex-end;padding:10px 14px;border-top:1px solid var(--border)}
 </style>
@@ -273,7 +281,8 @@ const EDITORS = [
   {id:"DialogueEditor", name:"对话编辑器 DialogueEditor"},
   {id:"DialogueCharacterEditor", name:"对话立绘编辑器 DialogueCharacterEditor"},
   {id:"MenuCharacterEditor", name:"菜单角色编辑器 MenuCharacterEditor"},
-  {id:"NoteSplashEditor", name:"NoteSplash 编辑器 NoteSplashEditor"},
+',
+'  {id:"NoteSplashEditor", name:"NoteSplash 编辑器 NoteSplashEditor"},
   {id:"NoteSplashDebug", name:"NoteSplash 调试 NoteSplashDebug"},
 ];
 const COMMON_KEYS = ["UP","DOWN","LEFT","RIGHT","W","A","S","D","ENTER","ESCAPE","TAB","SPACE","BACKSPACE","SHIFT","CONTROL","ALT","Q","E","Z","X","C","V","B","L","1","2","3","4","5","6","7","8","9","0","-","=","[","]","\\\\",";","\'",",",".","/","F1","F2","F5","DELETE","INSERT","HOME","END","PAGEUP","PAGEDOWN","NUMPAD0"];
@@ -397,7 +406,8 @@ function renderCanvas(){
     el.style.color = /^#[0-9a-fA-F]{6}$/.test(b.textColor||"") ? b.textColor : "#FFFFFF"; // 文字颜色，默认白
     const nm = document.createElement("div"); nm.className="bname"; nm.style.fontSize=Math.max(9,14*s)+"px"; nm.textContent=b.name; el.appendChild(nm);
     const bd = document.createElement("div"); bd.className="bbind"; bd.style.fontSize=Math.max(6,9*s)+"px"; bd.textContent=bindText(b); el.appendChild(bd);
-    if(b.isFather){ const fm=document.createElement("div"); fm.className="fmark"; fm.style.fontSize=Math.max(7,10*s)+"px"; fm.textContent = b.CanSwitch?("⛶切换"+(b.SwitchNum>1?("×"+b.SwitchNum):"")):"⛶父"; el.appendChild(fm); }
+',
+'    if(b.isFather){ const fm=document.createElement("div"); fm.className="fmark"; fm.style.fontSize=Math.max(7,10*s)+"px"; fm.textContent = b.CanSwitch?("⛶切换"+(b.SwitchNum>1?("×"+b.SwitchNum):"")):"⛶父"; el.appendChild(fm); }
     if(b.FuckItKey && b.FuckItKey.length && !b.CanSwitch){ const bs=document.createElement("div"); bs.className="badge-s"; bs.textContent="子:"+b.FuckItKey.join(","); el.appendChild(bs); }
     el.addEventListener("mousedown", (ev)=>{
       ev.preventDefault(); ev.stopPropagation();
@@ -520,7 +530,8 @@ document.getElementById("setW").addEventListener("keydown", (e)=>{ if(e.key === 
 document.getElementById("setH").addEventListener("keydown", (e)=>{ if(e.key === "Enter") applySize(); });
 
 const zoomR = document.getElementById("zoomR"), zoomV = document.getElementById("zoomV");
-zoomR.oninput = ()=>{ zoom = +zoomR.value/100; zoomV.textContent = zoomR.value+"%"; layoutPhone(); };
+',
+'zoomR.oninput = ()=>{ zoom = +zoomR.value/100; zoomV.textContent = zoomR.value+"%"; layoutPhone(); };
 
 /* ---------- 列表 ---------- */
 function rowEl(b){
@@ -643,7 +654,8 @@ function startCapture(b, ui){
   };
   const keydown = (e)=>{
     e.preventDefault(); e.stopPropagation();
-    if(e.repeat) return;
+',
+'    if(e.repeat) return;
     if(e.key === "Escape"){ stopCapture(); if(ui.onDone) ui.onDone(); return; }
     if(e.key === "Enter" && captured.length){ confirmCap(); return; }
     const n = capKeyName(e.code);
@@ -762,7 +774,8 @@ function propForm(b){
   capBar.appendChild(recBtn); capBar.appendChild(preview); capBar.appendChild(okBtn); capBar.appendChild(clrBtn);
   const renderBindChips = ()=>{
     bindChips.innerHTML = "";
-    if(!b.click.length){ bindChips.innerHTML = "<span class=\'note\' style=\'margin:0\'>未绑定（或父键 CanSwitch=T 时不输出）</span>"; return; }
+',
+'    if(!b.click.length){ bindChips.innerHTML = "<span class=\'note\' style=\'margin:0\'>未绑定（或父键 CanSwitch=T 时不输出）</span>"; return; }
     for(const k of b.click){
       const c = document.createElement("span"); c.className="chip used"; c.textContent = k;
       c.title = "点此从组合中移除该键";
@@ -878,7 +891,8 @@ function propForm(b){
       if(stages.length > targetCount) stages.length = targetCount;
       for(let si=0; si<stages.length; si++){
         const st = stages[si];
-        if(!st || typeof st !== "object" || !Array.isArray(st.keys)) { stages[si] = {keys:[],NameChinese:"",NameEnglish:""}; continue; }
+',
+'        if(!st || typeof st !== "object" || !Array.isArray(st.keys)) { stages[si] = {keys:[],NameChinese:"",NameEnglish:""}; continue; }
         const box = document.createElement("div"); box.className="subsec";
         const head = document.createElement("div"); head.className="swrow";
         const lab = document.createElement("span"); lab.className="arrow"; lab.textContent = "档 "+(si+1);
@@ -1001,7 +1015,8 @@ function normalizeButton(o){
     color: typeof o.color === "string" && o.color ? o.color : "#8B5CF6",
     textColor: typeof o.textColor === "string" && /^#[0-9a-fA-F]{6}$/.test(o.textColor) ? o.textColor : "#FFFFFF",
     desc: typeof o.desc === "string" ? o.desc : "",
-    isFather: !!o.isFather,
+',
+'    isFather: !!o.isFather,
     FuckItKey: Array.isArray(o.FuckItKey) ? o.FuckItKey.slice() : [],
     CanSwitch: !!o.CanSwitch,
     SwitchNum: typeof o.SwitchNum === "number" ? o.SwitchNum : 1,
@@ -1144,7 +1159,8 @@ function importJsonText(text, fname){
   if(doc && Array.isArray(doc.buttons)){ list = doc.buttons; if(typeof doc.editor === "string") srcEditor = doc.editor; }
   else if(Array.isArray(doc)) list = doc;
   else if(doc && typeof doc === "object") list = [doc];
-  if(!list || !list.length){ setFoot("文件里没有按键数据："+(fname||""), "err"); return; }
+',
+'  if(!list || !list.length){ setFoot("文件里没有按键数据："+(fname||""), "err"); return; }
   const nb = list.map(normalizeButton).filter(b=>b.name);
   if(!nb.length){ setFoot("导入的按键都无效（缺少 name）", "err"); return; }
   if(dirty && !confirm("当前编辑内容未保存，导入会覆盖它，继续？")) return;
@@ -1286,7 +1302,8 @@ async function loadEditor(id, opts){
       }catch(e){ setFoot("默认键位模板解析失败："+e,"err"); buttons = []; }
     } else {
       buttons = [];
-      if(!opts.silent) setFoot("模板暂不可用：点「＋ 新建按键」开始，或稍后重试「从默认键位生成」","warn");
+',
+'      if(!opts.silent) setFoot("模板暂不可用：点「＋ 新建按键」开始，或稍后重试「从默认键位生成」","warn");
     }
   }
   dirty = false;
@@ -1369,5 +1386,8 @@ boot();
 </script>
 </body>
 </html>
-';
+',
+];
+
+	public static var HTML:String = CHUNKS.join("");
 }

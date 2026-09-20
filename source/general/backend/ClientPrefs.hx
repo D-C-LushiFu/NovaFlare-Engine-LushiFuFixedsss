@@ -1,5 +1,7 @@
 package general.backend;
 
+import haxe.Exception;
+
 import flixel.util.FlxSave;
 import flixel.input.keyboard.FlxKey;
 import flixel.input.gamepad.FlxGamepadInputID;
@@ -452,8 +454,66 @@ class ClientPrefs
 		}
 	}
 
+	/**
+	 * Guarantees that `FlxG.save.data` is a usable container.
+	 *
+	 * `FlxSave.bind()` calls `destroy()` first (which sets `data = null`) and only
+	 * assigns a fresh value when the shared object loads successfully. So any save
+	 * file that fails to load (parsing error, IO error, invalid path) leaves
+	 * `FlxG.save.data` null, and reading a field off a null `Dynamic` is a hard
+	 * access violation on hxcpp (`EXCEPTION_ACCESS_VIOLATION`, 0xC0000005) that
+	 * kills the process before the first frame is drawn.
+	 *
+	 * Never let that happen: install an empty container and let the
+	 * `prefsVersion` migration in `loadPrefs()` repopulate every default.
+	 */
+	public static function ensureSaveData():Dynamic
+	{
+		if (FlxG.save == null)
+			return null;
+
+		var current:Dynamic = FlxG.save.data;
+		if (current == null)
+		{
+			current = {};
+			@:privateAccess FlxG.save.data = current;
+			FlxG.log.warn('[ClientPrefs] FlxG.save.data was null (save could not be loaded), starting from defaults.');
+		}
+		return current;
+	}
+
+	/**
+	 * Recovery parser handed to `FlxSave.bind()` as its `backupParser` argument.
+	 *
+	 * flixel only calls this when the save file exists but cannot be unserialized
+	 * (for example a save holding a class instance the runtime cannot rebuild, such
+	 * as the `FlxPoint` values older builds wrote into the mobile control settings).
+	 * Without a recovery parser `bind()` simply returns false and leaves `data`
+	 * null, which is what used to crash the engine during boot; returning a fresh
+	 * container keeps the game running, and the previous file is preserved on disk
+	 * as `funkin.sol.unreadable` so nothing is lost silently.
+	 */
+	public static function recoverUnreadableSave(raw:String, error:Exception):Null<Dynamic>
+	{
+		FlxG.log.warn('[ClientPrefs] Save data could not be read ($error) - keeping a backup and starting from defaults.');
+
+		#if sys
+		try
+		{
+			if (raw != null && raw.length > 0)
+				sys.io.File.saveContent('funkin.sol.unreadable', raw);
+		}
+		catch (e:Dynamic) {}
+		#end
+
+		return {};
+	}
+
 	public static function loadPrefs()
 	{
+		// A failed `FlxG.save.bind()` leaves `data` null; repair it before touching it.
+		ensureSaveData();
+
 		#if ACHIEVEMENTS_ALLOWED Achievements.load(); #end
 
 		if (FlxG.save.data.prefsVersion != data.prefsVersion)
@@ -508,7 +568,7 @@ class ClientPrefs
 
 			var controlSave:FlxSave = new FlxSave();
 			controlSave.bind('controls_v4', CoolUtil.getSavePath());
-			if (controlSave != null)
+			if (controlSave != null && controlSave.data != null)
 			{
 				controlSave.data.keyboard = defaultKeys;
 				controlSave.flush();
@@ -541,7 +601,7 @@ class ClientPrefs
 
 			var save:FlxSave = new FlxSave();
 			save.bind('controls_v4', CoolUtil.getSavePath());
-			if (save != null)
+			if (save != null && save.data != null)
 			{
 				if (save.data.keyboard != null)
 				{
@@ -700,17 +760,20 @@ class ClientPrefs
 
 	public static function reloadVolumeKeys()
 	{
-		TitleState.muteKeys = keyBinds.get('volume_mute').copy();
-		TitleState.volumeDownKeys = keyBinds.get('volume_down').copy();
-		TitleState.volumeUpKeys = keyBinds.get('volume_up').copy();
+		var _mk:Array<FlxKey> = keyBinds != null ? keyBinds.get('volume_mute') : null;
+		TitleState.muteKeys = _mk != null ? _mk.copy() : [];
+		var _dk:Array<FlxKey> = keyBinds != null ? keyBinds.get('volume_down') : null;
+		TitleState.volumeDownKeys = _dk != null ? _dk.copy() : [];
+		var _uk:Array<FlxKey> = keyBinds != null ? keyBinds.get('volume_up') : null;
+		TitleState.volumeUpKeys = _uk != null ? _uk.copy() : [];
 		toggleVolumeKeys(true);
 	}
 
 	public static function toggleVolumeKeys(?turnOn:Bool = true)
 	{
-		FlxG.sound.muteKeys = turnOn ? TitleState.muteKeys : [];
-		FlxG.sound.volumeDownKeys = turnOn ? TitleState.volumeDownKeys : [];
-		FlxG.sound.volumeUpKeys = turnOn ? TitleState.volumeUpKeys : [];
+		if (FlxG.sound != null) FlxG.sound.muteKeys = turnOn ? TitleState.muteKeys : [];
+		if (FlxG.sound != null) FlxG.sound.volumeDownKeys = turnOn ? TitleState.volumeDownKeys : [];
+		if (FlxG.sound != null) FlxG.sound.volumeUpKeys = turnOn ? TitleState.volumeUpKeys : [];
 	}
 
 	public static function get(variable:String, supportMods:Bool = true):Dynamic {

@@ -86,6 +86,19 @@ class TitleState extends MusicBeatState
 		GABridge.sendDesign("title:screen");
 		Paths.clearUnusedMemory();
 
+		#if sys
+		// ★ 临时调试引导：设置环境变量 NF_BOOT_MODS=1 可直接进入 Mods 菜单，
+		//   便于在无法操作画面的环境下通过 1145 trace 端口验证界面（删除本块即恢复）
+		if (Sys.getEnv('NF_BOOT_MODS') == '1')
+		{
+			states.modsMenuState.ModsMenuState.debugLog = true;
+			states.modsMenuState.ModsMenuState.dbg('=== NF_BOOT_MODS=1: boot into ModsMenuState ===');
+			trace('[Debug] NF_BOOT_MODS=1 -> boot straight into ModsMenuState');
+			MusicBeatState.switchState(new states.modsMenuState.ModsMenuState());
+			return;
+		}
+		#end
+
 		#if LUA_ALLOWED
 		Mods.pushGlobalMods();
 		#end

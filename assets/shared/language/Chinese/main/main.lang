@@ -1,5 +1,6 @@
 languageName => 中文
 fontName => Lang-ZH
+langPreview => 当你在设置中调整语言然后看这条消息的时候，你发现你成功设置了语言。于是你再次切换语言——哦不为什么看不懂了。
 justsayLang => Lang-ZH
 play => 游玩
 back => 返回
