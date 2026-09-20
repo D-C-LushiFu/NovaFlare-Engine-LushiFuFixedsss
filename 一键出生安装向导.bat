@@ -4,9 +4,14 @@ rem  One-click rebuild of the NovaFlare installer.
 rem  (filename is Chinese on purpose; content stays pure ASCII so
 rem   cmd can parse it on any locale - no codepage issues)
 rem
-rem  Workflow: update resources -> re-export windows build ->
-rem  re-create "NovaFlare Engine.rar" inside
-rem  export\legacy-gc\windows\bin with WinRAR -> run this file.
+rem  Workflow: re-export windows build -> run this file.
+rem  build.bat now packs payload.rar AUTOMATICALLY from
+rem  export\legacy-gc\windows\bin (only the files the game needs;
+rem  user data such as crash\ logs\ mods\ is skipped), so the old
+rem  manual "create NovaFlare Engine.rar with WinRAR" step is gone.
+rem
+rem  Tools: WinRAR's Rar.exe is required for the payload step
+rem         (the installer embeds UnRAR 7.00 and reads RAR5).
 rem ============================================================
 setlocal
 cd /d "%~dp0"
@@ -16,8 +21,9 @@ echo   NovaFlare Installer - one-click rebuild
 echo   (???????? - see file name)
 echo ================================================
 echo  [1/1] calling NovaFlareEngineInstaller\build.bat ...
-echo        (refreshes payload.rar, compiles, appends the
-echo         payload, verifies the footer, updates dist\)
+echo        (auto-packs payload.rar from the windows build
+echo         output, compiles, appends the payload,
+echo         verifies the footer, updates dist\)
 echo.
 
 call "NovaFlareEngineInstaller\build.bat"

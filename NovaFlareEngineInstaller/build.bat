@@ -2,7 +2,9 @@
 rem ============================================================
 rem  build.bat - full installer build (RAR payload distribution)
 rem  1) (re)generate icon.res from icon.rc if missing
-rem  2) refresh payload.rar from the engine windows build output
+rem  2) pack payload.rar AUTOMATICALLY from the engine windows
+rem     build output (export\legacy-gc\windows\bin) - only the
+rem     files the game needs; no manual WinRAR step any more
 rem  3) compile installer (embeds unrar.exe + icon)
 rem  4) copy result and append the payload to the exe itself
 rem  5) verify appended footer and refresh dist\ (single file)
@@ -10,7 +12,7 @@ rem ============================================================
 setlocal
 cd /d "%~dp0"
 
-set "SRC_RAR=..\export\legacy-gc\windows\bin\NovaFlare Engine.rar"
+set "BIN=..\export\legacy-gc\windows\bin"
 set "VCVARS=C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
 set "OUT_EXE=NovaFlareEngine-1.2.1ButLushiFuFixedsss-Installer.exe"
 
@@ -20,29 +22,22 @@ if not exist icon.res (
     echo         rc /fo icon.res icon.rc
     exit /b 1
   )
-  echo [0/4] building icon.res ...
+  echo [0/5] building icon.res ...
   call "%VCVARS%" >nul 2>&1
   rc /fo icon.res icon.rc || exit /b 1
 )
 
-if exist "%SRC_RAR%" (
-  echo [1/4] refreshing payload.rar from engine build output ...
-  copy /y "%SRC_RAR%" payload.rar >nul || exit /b 1
-) else (
-  if not exist payload.rar (
-    echo [ERROR] payload.rar missing and source not found: %SRC_RAR%
-    exit /b 1
-  )
-  echo [1/4] keeping existing payload.rar (source rar not found)
-)
+echo [1/5] building payload.rar from "%BIN%" ^(automatic^) ...
+if exist payload.zip del /f /q payload.zip
+call make_payload_rar.bat || exit /b 1
 
-echo [2/4] compiling installer (unrar.exe + icon embedded)...
+echo [2/5] compiling installer (unrar.exe + icon embedded)...
 haxe -cp src -main Main -cpp bin\cpp -D HXCPP_M64 -resource unrar.exe@unrar || exit /b 1
 
-echo [3/4] copying exe ...
+echo [3/5] copying exe ...
 copy /y bin\cpp\Main.exe "%OUT_EXE%" >nul || exit /b 1
 
-echo [4/4] appending payload.rar to exe ...
+echo [4/5] appending payload.rar to exe ...
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\append_payload.ps1 -Exe "%OUT_EXE%" -Payload payload.rar || exit /b 1
 
 echo [5/5] verifying appended payload footer ...
