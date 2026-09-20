@@ -493,9 +493,19 @@ class FlxSound extends FlxBasic
 	 */
 	public function loadEmbedded(EmbeddedSound:FlxSoundAsset, Looped:Bool = false, AutoDestroy:Bool = false, ?OnComplete:Void->Void):FlxSound
 	{
+		// NovaFlare fix: 资源为空或找不到时，原实现在这里直接 return，绕过了下面的
+		// cleanup(true) → reset()，而那正是唯一会重建 _transform 的地方。
+		// SoundFrontEnd.play() 随后会在 loadHelper() 里执行 sound.volume = volume，
+		// 于是 updateTransform() 解引用 null 的 _transform（写 NULL+0x30）触发 SIGSEGV。
+		// 这里先确保状态被正确重置、_transform 已重建，再返回"未加载"状态。
 		if (EmbeddedSound == null)
+		{
+			cleanup(true);
+			_sound = null;
+			exists = false;
 			return this;
-			
+		}
+
 		cleanup(true);
 
 		#if hxvlc
