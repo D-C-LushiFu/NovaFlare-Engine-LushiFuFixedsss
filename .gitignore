@@ -70,3 +70,4 @@ art/build_html-debug.bat
 /NovaFlareEngineInstaller/*.rar
 /NovaFlareEngineInstaller/*.zip
 /NovaFlareEngineInstaller/*.res
+/_crashlogs/
